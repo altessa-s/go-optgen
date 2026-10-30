@@ -43,4 +43,5 @@ package rather than any internal package to access the types they receive and pr
 | `IsComparable` | Values of the type are comparable (resolved types)                                            |
 | `ElemComparable` | Slice elements are comparable (resolved element types)                                      |
 | `HasModifiers` | Whether the field has any modifiers                                                           |
+| `Mandatory`    | `optgen:"mandatory"`: a parameter of the generated constructor instead of a `WithXxx` option  |
 | `DefaultOnly`  | Include the field in `defaultOptions()` but skip `WithXxx` generation                         |

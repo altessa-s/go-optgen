@@ -1,7 +1,7 @@
 # optgen
 
 ```go
-import "github.com/altessa-s/go-optgen/commands"
+import optgen "github.com/altessa-s/go-optgen"
 ```
 
 Generate functional option functions from struct field tags.
@@ -87,11 +87,28 @@ Flags:
       --check-failure        Failed optcheck without an error result: panic (default) or skip
       --no-default-modifiers Do not apply default modifiers (trimspaces, notnil, dedup, positive)
       --allow-formatter      Add a formatter command name to the allowlist (repeatable; CLI only)
+      --validate             Check optcheck rules on the final options in the constructor
+      --with-isset           Track applied options in a <type>FieldSet field; generate isSet
+      --strict               Treat warnings as errors; nothing is written on a warning
+      --defaults-from        Defaults start value: tag (default), var[=name], func[=name], none
+      --slice-setter         Slice option parameter: variadic (default) or slice
+      --exclude              Skip fields matching name patterns (path.Match), comma-separated
+      --source-file          Search the struct only in this file, e.g. "$GOFILE"
 ```
 
 Several types in one `--type` list derive each name from the type: `checkOptions` generates `check_options_gen.go` with option type
 `CheckOption` and functions `defaultCheckOptions`/`newCheckOptions`. `--output`, `--option-type`, `--default-func-name` and `--new-func-name`
 cannot be combined with several types.
+
+Field tags and generated code:
+
+| Feature | Declaration | Generated |
+|---|---|---|
+| Mandatory field | `addr string optgen:"mandatory"` | `newOptions(addr string, opts ...Option)`, no `WithAddr` |
+| Final validation | `--validate` with `optcheck` rules | `validate<Type>(o)` called by `newOptions`; unset fields and defaults are checked |
+| Applied options | `--with-isset` and a field `set optionsFieldSet` | `optionsFieldName` constants and `o.isSet(optionsFieldName)` |
+| Defaults from code | `--defaults-from var` and `var defaultOptionsValue = options{...}` | `defaultOptions` copies the variable, then applies tag defaults |
+| Duration literal | `optgen:"default=1m30s"` on `time.Duration` | `90 * time.Second` |
 
 ### list-plugins
 

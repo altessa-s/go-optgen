@@ -61,9 +61,9 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v ...string) {{.OptionTyp
 			netIPs = append(netIPs, ip)
 		}
 {{.PipelineCode}}{{if not .Final}}		{{- if .Append}}
-		o.{{.FieldName}} = append(o.{{.FieldName}}, {{.ValueExpr}}...)
+		{{.MarkSet}}o.{{.FieldName}} = append(o.{{.FieldName}}, {{.ValueExpr}}...)
 		{{- else}}
-		o.{{.FieldName}} = {{.ValueExpr}}
+		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
 		{{- end}}
 {{- end}}{{- template "optionReturn" . }}
 	}

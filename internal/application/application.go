@@ -90,6 +90,7 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 			Fields:              fields,
 			Imports:             pkg.Imports,
 			NormalizationMethod: pkg.NormalizationMethod,
+			IsSetField:          pkg.IsSetField,
 			GenericInfo:         pkg.GenericInfo,
 		})
 		if err != nil {

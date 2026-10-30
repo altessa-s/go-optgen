@@ -16,6 +16,8 @@ import (
 // Pipeline produces the value-processing code consumed by field renderers.
 type Pipeline interface {
 	BuildPipeline(GenerationContext, model.OptField, string) PipelineResult
+	// BuildChecks renders only the field's optcheck validations of valueVar.
+	BuildChecks(ctx GenerationContext, field model.OptField, valueVar string) []string
 }
 
 // ValuePlugins provides only the queries needed by pipeline execution.
@@ -101,6 +103,11 @@ func (r *Executor) transformValue(ctx GenerationContext, field model.OptField, v
 	}
 	// Materialize expressions so later modifiers receive an assignable value.
 	return ModifierResult{Code: []string{"transformedValue := " + transformed}, OutputVar: "transformedValue"}
+}
+
+// BuildChecks renders the field's checks of valueVar, as in the check phase.
+func (r *Executor) BuildChecks(ctx GenerationContext, field model.OptField, valueVar string) []string {
+	return r.checkValue(ctx, field, valueVar)
 }
 
 // checkValue renders the field's checks by priority, then key. Declarations

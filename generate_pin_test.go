@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands_test
+package optgen_test
 
 import (
 	"bytes"
@@ -12,16 +12,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/altessa-s/go-optgen/commands"
 	"github.com/altessa-s/go-optgen/config"
 	"github.com/altessa-s/go-optgen/internal/plugin/builtin"
 	"github.com/altessa-s/go-optgen/plugin"
+
+	optgen "github.com/altessa-s/go-optgen"
 )
 
 // execGeneratePin runs the generate command with args and returns its error.
 func execGeneratePin(tb testing.TB, args ...string) error {
 	tb.Helper()
-	cmd := commands.NewGenerate()
+	cmd := optgen.NewGenerate()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)

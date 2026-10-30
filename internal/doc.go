@@ -6,5 +6,5 @@
 //
 // # Usage
 //
-//	commands.New()
+//	optgen.New()
 package internal

@@ -57,7 +57,7 @@ var boolFlagTemplate = fieldtmpl.Must("bool_flag", `// {{.FuncPrefix}}{{.OptionN
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}() {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		value := true
-{{.PipelineCode}}{{if not .Final}}o.{{.FieldName}} = {{.ValueExpr}}{{end}}
+{{.PipelineCode}}{{if not .Final}}{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{end}}
 {{- template "optionReturn" . }}
 	}
 }`)
@@ -65,7 +65,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}() {{.OptionType}}{{.TypeP
 var boolSetterTemplate = fieldtmpl.Must("bool_setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v bool) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
-		{{.PipelineCode}}{{if not .Final}}o.{{.FieldName}} = {{.ValueExpr}}{{end}}
+		{{.PipelineCode}}{{if not .Final}}{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{end}}
 {{- template "optionReturn" . }}
 	}
 }`)

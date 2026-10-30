@@ -22,4 +22,4 @@ Package `rootcmd` constructs Cobra roots with version reporting and generated op
 | `WithSubcommands` | Child commands |
 | `WithOut`, `WithErr` | Output writers; defaults are standard streams |
 
-See [commands](../../commands/README.md) for application assembly.
+See the [root package](../../README.md#library-api) for application assembly.

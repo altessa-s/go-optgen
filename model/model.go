@@ -36,6 +36,7 @@ type OptField struct {
 	ElemComparable bool // Whether slice elements are comparable (resolved element types only)
 	HasModifiers   bool // Whether the field has any modifiers
 	DefaultOnly    bool // If true, include in defaultOptions() but skip WithXxx generation
+	Mandatory      bool // optgen:"mandatory": a constructor parameter instead of a WithXxx option
 }
 
 // HasModifier reports whether modifier appears in the field's optval tag list.

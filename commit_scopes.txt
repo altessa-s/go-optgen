@@ -3,14 +3,13 @@
 # Example: fix(internal/parser): keep field order stable
 
 # Root-level scopes
-root                        # Repository-wide changes (go.mod, Makefile, configs)
+root                        # Root package optgen (CLI) and repository-wide changes (go.mod, Makefile, configs)
 deps                        # Dependency management
 README                      # Root README
 docs                        # Documentation
 
 # Packages
 cmd/optgen                  # optgen binary
-commands                    # CLI commands (generate)
 config                      # .optgen.yaml loading
 model                       # Parsed option model
 plugin                      # Public plugin API and registry

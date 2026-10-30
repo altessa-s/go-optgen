@@ -2,12 +2,13 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands
+package optgen
 
 import (
 	"cmp"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/spf13/cobra"
@@ -33,6 +34,7 @@ type GenerateCommand struct {
 	options  *options
 	registry *plugin.Registry
 	targets  []target
+	warnings *warningCounter
 }
 
 // NewGenerate returns a cobra command that generates functional option functions
@@ -240,6 +242,41 @@ func (c *GenerateCommand) configure() {
 		for strings, notnil for pointers and dedup for slices.
 	`))
 
+	c.Flags().BoolVar(&c.s.validate, "validate", false, heredoc.Doc(`
+		Check every optcheck rule on the final options in the constructor, so
+		unset fields and defaults are validated too.
+	`))
+
+	c.Flags().BoolVar(&c.s.withIsSet, "with-isset", false, heredoc.Doc(`
+		Record applied options in the struct field of type <type>FieldSet and
+		generate an isSet method with one <type>Field<Name> constant per option.
+	`))
+
+	c.Flags().BoolVar(&c.s.strict, "strict", false, heredoc.Doc(`
+		Treat warnings, such as ignored modifiers or exported option fields, as
+		errors: nothing is written when a warning is reported.
+	`))
+
+	c.Flags().StringVar(&c.s.defaultsFrom, "defaults-from", "", heredoc.Doc(`
+		Starting value of the default function: "tag" (default), "var[=name]"
+		copies a variable, "func[=name]" calls a function, "none" ignores every
+		default. Tag defaults apply on top of var and func values.
+	`))
+
+	c.Flags().StringVar(&c.s.sliceSetter, "slice-setter", "", heredoc.Doc(`
+		Parameter of slice options: "variadic" (default) or "slice".
+	`))
+
+	c.Flags().StringSliceVar(&c.s.exclude, "exclude", nil, heredoc.Doc(`
+		Skip fields whose name matches a pattern (path.Match syntax), for
+		example --exclude 'internal*,debug*'.
+	`))
+
+	c.Flags().StringVar(&c.s.sourceFile, "source-file", "", heredoc.Doc(`
+		Look for the struct only in this file of the directory, for example
+		--source-file "$GOFILE" in a go:generate directive.
+	`))
+
 	c.PersistentPreRunE = c.preRun
 
 	c.RunE = c.run
@@ -253,7 +290,8 @@ func (c *GenerateCommand) preRun(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
-	registry, err := newSessionRegistry(cmd.ErrOrStderr(), c.options, c.s.typeDefaults, c.s.disabledPluginNames())
+	c.warnings = &warningCounter{sink: warningSink(cmd.ErrOrStderr())}
+	registry, err := newSessionRegistry(c.warnings.warn, c.options, c.s.typeDefaults, c.s.disabledPluginNames())
 	if err != nil {
 		return err
 	}
@@ -277,17 +315,23 @@ func (c *GenerateCommand) run(cmd *cobra.Command, _ []string) error {
 	if s.verbose {
 		diagnostics = out
 	}
+	warnings := c.warnings
 	preparer := semantic.New(c.registry,
 		semantic.WithPrefix(s.optionPrefix),
 		semantic.WithDefaultModifiers(!s.noDefaultMods),
-		semantic.WithWarningSink(warningSink(cmd.ErrOrStderr())),
+		semantic.WithExclude(s.exclude...),
+		semantic.WithWarningSink(warnings.warn),
 	)
+	var publisher application.Output = output.New(out, cmd.ErrOrStderr(), diagnostics, output.WithAllowedFormatters(s.allowFormatters...))
+	if s.strict {
+		publisher = strictOutput{next: publisher, warnings: warnings}
+	}
 	service := application.New(
-		reportingSource{source: source.Reader{}, out: out, verbose: s.verbose},
+		reportingSource{source: source.Reader{File: filepath.Base(s.sourceFile)}, out: out, verbose: s.verbose},
 		reportingPreparer{preparer: preparer, out: out, verbose: s.verbose,
 			funcPrefix: cmp.Or(s.funcPrefix, model.DefaultFuncPrefix)},
 		generator.New(c.registry, plugin.NewPipeline(c.registry)),
-		output.New(out, cmd.ErrOrStderr(), diagnostics, output.WithAllowedFormatters(s.allowFormatters...)),
+		publisher,
 	)
 	var artifacts []application.Artifact
 	for _, t := range c.targets {

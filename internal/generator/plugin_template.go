@@ -48,9 +48,36 @@ type {{.OptionType}}{{.GenericInfo.TypeParamsDecl}} func(o *{{.TypeName}}{{.Gene
 
 {{end}}
 {{end}}
+{{if .IsSet}}
+// {{.IsSet.FieldType}} identifies an option of {{.TypeName}} in a {{.IsSet.SetType}}.
+type {{.IsSet.FieldType}} uint
+
+// {{.IsSet.SetType}} records the options applied to {{.TypeName}}.
+type {{.IsSet.SetType}} uint64
+
+const (
+{{- range $i, $c := .IsSet.Consts}}
+	{{$c}} {{if eq $i 0}}{{$.IsSet.FieldType}} = iota{{end}}
+{{- end}}
+)
+
+// isSet reports whether the option of field was applied.
+func (o *{{.TypeName}}{{.GenericInfo.TypeParamsNames}}) isSet(field {{.IsSet.FieldType}}) bool {
+	return o.{{.IsSet.Field}}&(1<<field) != 0
+}
+{{end}}
 {{if .GenerateDefaultFunc}}
 // {{.DefaultFuncName}} returns the default values for {{.TypeName}}.
 func {{.DefaultFuncName}}{{.GenericInfo.TypeParamsDecl}}() *{{.TypeName}}{{.GenericInfo.TypeParamsNames}} {
+{{- if or (eq .DefaultsFrom "var") (eq .DefaultsFrom "func")}}
+	o := {{.DefaultsName}}{{if eq .DefaultsFrom "func"}}{{.GenericInfo.TypeParamsNames}}(){{end}}
+{{- range .Fields}}
+{{- if trim .Default}}
+	o.{{.FieldName}} = {{.Default}}
+{{- end}}
+{{- end}}
+	return &o
+{{- else}}
 	return &{{.TypeName}}{{.GenericInfo.TypeParamsNames}}{
 {{- range .Fields}}
 {{- if trim .Default}}
@@ -58,6 +85,7 @@ func {{.DefaultFuncName}}{{.GenericInfo.TypeParamsDecl}}() *{{.TypeName}}{{.Gene
 {{- end}}
 {{- end}}
 	}
+{{- end}}
 }
 {{end}}
 {{if .GenerateNewFunc}}
@@ -65,8 +93,11 @@ func {{.DefaultFuncName}}{{.GenericInfo.TypeParamsDecl}}() *{{.TypeName}}{{.Gene
 {{- $g := .GenericInfo}}
 {{- $retType := printf "*%s%s" .TypeName $g.TypeParamsNames}}
 {{- if .OptionReturnsError}}{{$retType = printf "(%s, error)" $retType}}{{end}}
-func {{.NewFuncName}}{{$g.TypeParamsDecl}}(opts ...{{.OptionType}}{{$g.TypeParamsNames}}) {{$retType}} {
+func {{.NewFuncName}}{{$g.TypeParamsDecl}}({{range .Mandatory}}{{.Param}} {{.Type}}, {{end}}opts ...{{.OptionType}}{{$g.TypeParamsNames}}) {{$retType}} {
 	o := {{.DefaultFuncName}}{{.GenericInfo.TypeParamsNames}}()
+{{- range .Mandatory}}
+	o.{{.Field}} = {{.Param}}
+{{- end}}
 	for _, opt := range opts {
 {{- if .OptionReturnsError}}
 		if err := opt(o); err != nil {
@@ -79,6 +110,15 @@ func {{.NewFuncName}}{{$g.TypeParamsDecl}}(opts ...{{.OptionType}}{{$g.TypeParam
 {{- if .NormalizationMethod}}
 	o.{{.NormalizationMethod}}()
 {{- end}}
+{{- if and .Validation (eq .ValidateFailure "return")}}
+	if err := {{.ValidateFuncName}}(o); err != nil {
+		return nil, err
+	}
+{{- else if and .Validation (eq .ValidateFailure "panic")}}
+	if err := {{.ValidateFuncName}}(o); err != nil {
+		panic(err)
+	}
+{{- end}}
 {{- if .OptionReturnsError}}
 	return o, nil
 {{- else}}
@@ -87,6 +127,12 @@ func {{.NewFuncName}}{{$g.TypeParamsDecl}}(opts ...{{.OptionType}}{{$g.TypeParam
 }
 {{end}}
 
+{{if .Validation}}
+// {{.ValidateFuncName}} checks the optcheck rules of every field of o.
+func {{.ValidateFuncName}}{{.GenericInfo.TypeParamsDecl}}(o *{{.TypeName}}{{.GenericInfo.TypeParamsNames}}) error {
+{{.Validation}}	return nil
+}
+{{end}}
 {{if .Helpers}}
 {{range .Helpers}}
 {{.}}

@@ -2,10 +2,6 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-// This file defines the CheckPlugin interface for
-// optcheck validation plugins. CheckPlugins generate validation code for field
-// values based on optcheck tag annotations (e.g., "required", "minlen=3").
-
 package plugin
 
 import "github.com/altessa-s/go-optgen/model"

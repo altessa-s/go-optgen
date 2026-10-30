@@ -61,6 +61,7 @@ type FindOptFieldsResult struct {
 	Fields      []model.OptField            // Parsed fields with opt tags
 	Imports     map[string]model.ImportInfo // Import alias to ImportInfo mapping
 	GenericInfo model.GenericInfo           // Generic type parameters if the struct is generic
+	IsSetField  string                      // Field of type <TypeName>FieldSet recording applied options
 }
 
 // FindOptFields finds all fields with opt tags in the specified struct type.
@@ -116,6 +117,11 @@ func FindOptFields(pkg *ast.Package, typeName string, processAllFields bool, typ
 
 			// Process each field in the struct
 			for _, field := range st.Fields.List {
+				// The field set records applied options; it is not an option.
+				if TypeToString(field.Type) == typeName+"FieldSet" && len(field.Names) == 1 {
+					result.IsSetField = field.Names[0].Name
+					continue
+				}
 				optFields, err := processStructField(field, processAllFields, result.Imports, types)
 				if err != nil {
 					parseErr = err
@@ -287,6 +293,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			ElemType:     elemType,
 			Modifiers:    slices.Clone(modifiers),
 			Metadata:     maps.Clone(parsed.Metadata),
+			Mandatory:    parsed.Metadata["mandatory"] == "true",
 			Checks:       maps.Clone(parsed.Checks),
 			BareChecks:   maps.Clone(parsed.BareChecks),
 			HasModifiers: len(modifiers) > 0,

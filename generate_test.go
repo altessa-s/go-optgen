@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands_test
+package optgen_test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/altessa-s/go-optgen/commands"
+	optgen "github.com/altessa-s/go-optgen"
 )
 
 const sampleSource = `package sample
@@ -30,7 +30,7 @@ func runGenerate(tb testing.TB, args ...string) (string, string) {
 	dir := tb.TempDir()
 	require.NoError(tb, os.WriteFile(filepath.Join(dir, "options.go"), []byte(sampleSource), 0o600))
 
-	cmd := commands.NewGenerate()
+	cmd := optgen.NewGenerate()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -84,7 +84,7 @@ func TestGenerate_NoTaggedStruct(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "x.go"), []byte("package sample\n\ntype other struct{}\n"), 0o600))
 
-	cmd := commands.NewGenerate()
+	cmd := optgen.NewGenerate()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)

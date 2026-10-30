@@ -19,7 +19,22 @@ import (
 // highest-priority [plugin.FieldPlugin] that can handle it; if no plugin matches,
 // an error is returned. The output is deterministically ordered by option name.
 func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
+	if in.DefaultsFrom == model.DefaultsFromNone {
+		in.Fields = slices.Clone(in.Fields)
+		for i := range in.Fields {
+			in.Fields[i].Default = ""
+		}
+	}
+	if in.WithIsSet {
+		if in.IsSetField == "" {
+			return nil, fmt.Errorf("with-isset: declare a field of type %sFieldSet in %s", in.TypeName, in.TypeName)
+		}
+		if len(in.Fields) > maxIsSetFields {
+			return nil, fmt.Errorf("with-isset: %s has %d fields, at most %d are supported", in.TypeName, len(in.Fields), maxIsSetFields)
+		}
+	}
 	ctx := plugin.NewGenerationContext(in.PackageName, in.RenderSettings, in.Fields, in.Imports, in.GenericInfo)
+	ctx.IsSetField = in.IsSetField
 
 	type funcOut struct {
 		fieldName  string
@@ -58,10 +73,13 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 			optionName: field.OptionName,
 			code:       result.Code,
 		})
-		needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != ""
+		// Mandatory fields have no option but appear in the constructor signature.
+		needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
 		typeDefs = append(typeDefs, result.TypeDefs...)
 		helpers = append(helpers, result.Helpers...)
 	}
+
+	validation := g.validationCode(ctx, in)
 
 	for _, imp := range ctx.GetAdditionalImports() {
 		addImport(imp)
@@ -122,6 +140,13 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		Helpers             []string
 		Fields              []model.OptField
 		GenericInfo         model.GenericInfo
+		Mandatory           []mandatoryParam
+		DefaultsFrom        model.DefaultsSource
+		DefaultsName        string
+		ValidateFuncName    string
+		Validation          string
+		ValidateFailure     string
+		IsSet               *isSetData
 	}{
 		Package:             in.PackageName,
 		TypeName:            in.TypeName,
@@ -139,7 +164,93 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		Helpers:             helpers,
 		Fields:              in.Fields,
 		GenericInfo:         in.GenericInfo,
+		Mandatory:           mandatoryParams(in.Fields),
+		DefaultsFrom:        in.DefaultsFrom,
+		DefaultsName:        in.DefaultsName,
+		ValidateFuncName:    validateFuncName(in.RenderSettings),
+		Validation:          validation,
+		ValidateFailure:     validateFailure(in.RenderSettings),
+		IsSet:               newIsSetData(ctx, in),
 	}
 
 	return g.renderPluginTemplate(data)
+}
+
+// maxIsSetFields is the capacity of the uint64 field set.
+const maxIsSetFields = 64
+
+// mandatoryParam is a constructor parameter assigned to a mandatory field.
+type mandatoryParam struct {
+	Field, Param, Type string
+}
+
+// mandatoryParams lists the mandatory fields in declaration order. Parameter
+// names avoid the identifiers used by the generated constructor.
+func mandatoryParams(fields []model.OptField) []mandatoryParam {
+	var out []mandatoryParam
+	for _, f := range fields {
+		if !f.Mandatory {
+			continue
+		}
+		param := f.FieldName
+		if slices.Contains([]string{"o", "opt", "opts", "err"}, param) {
+			param += "Value"
+		}
+		out = append(out, mandatoryParam{Field: f.FieldName, Param: param, Type: f.Type})
+	}
+	return out
+}
+
+func validateFuncName(s model.RenderSettings) string {
+	return cmp.Or(s.ValidateFuncName, "validate"+strings.ToUpper(s.TypeName[:1])+s.TypeName[1:])
+}
+
+// validateFailure returns how newOptions reports a validation error: "return"
+// for error results, "panic", or "" when final validation is skipped.
+func validateFailure(s model.RenderSettings) string {
+	switch {
+	case !s.Validate:
+		return ""
+	case s.OptionReturnsError:
+		return "return"
+	case s.CheckFailure == model.CheckFailureSkip:
+		return ""
+	default:
+		return "panic"
+	}
+}
+
+// validationCode renders every field's checks of its final value for the
+// validation function; validation always reports an error.
+func (g *Generator) validationCode(ctx plugin.GenerationContext, in model.GenerateInput) string {
+	if !in.Validate {
+		return ""
+	}
+	checkCtx := ctx
+	checkCtx.OptionReturnsError = true
+	var lines []string
+	for _, f := range in.Fields {
+		lines = append(lines, g.pipeline.BuildChecks(checkCtx, f, "o."+f.FieldName)...)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "\t" + strings.Join(lines, "\n\t") + "\n"
+}
+
+// isSetData describes the generated field-set constants and isSet method.
+type isSetData struct {
+	FieldType, SetType, Field string
+	Consts                    []string
+}
+
+func newIsSetData(ctx plugin.GenerationContext, in model.GenerateInput) *isSetData {
+	if !in.WithIsSet {
+		return nil
+	}
+	d := &isSetData{FieldType: in.TypeName + "Field", SetType: in.TypeName + "FieldSet", Field: in.IsSetField}
+	for _, f := range in.Fields {
+		d.Consts = append(d.Consts, ctx.IsSetConst(f))
+	}
+	return d
 }

@@ -15,6 +15,8 @@ type options struct {
 	defaultModifiers bool `optgen:"default=DefaultDefaultModifiers" optval:"param"`
 	// prefix is prepended to every option name before validation.
 	prefix string `optval:"notrim"`
+	// exclude drops fields whose name matches one of these path.Match patterns.
+	exclude []string `optval:"nodup"`
 	// warningSink receives diagnostics, such as a check skipped because its
 	// plugin is disabled.
 	warningSink func(message string)

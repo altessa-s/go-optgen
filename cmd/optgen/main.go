@@ -7,11 +7,11 @@ package main
 import (
 	"os"
 
-	"github.com/altessa-s/go-optgen/commands"
+	optgen "github.com/altessa-s/go-optgen"
 )
 
 func main() {
-	if err := commands.Run(os.Args[1:]); err != nil {
+	if err := optgen.Run(os.Args[1:]); err != nil {
 		os.Exit(1)
 	}
 }

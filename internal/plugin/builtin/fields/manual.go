@@ -34,7 +34,7 @@ func (p *ManualPlugin) Meta() plugin.Meta {
 // CanHandle reports whether the plugin applies to field.
 func (p *ManualPlugin) CanHandle(field model.OptField) bool {
 	// Handle explicit "manual" metadata or explicit default-only model fields
-	return plugin.IsTruthyMetadata(field.Metadata, "manual") || field.DefaultOnly
+	return plugin.IsTruthyMetadata(field.Metadata, "manual") || field.DefaultOnly || field.Mandatory
 }
 
 // Generate renders the option function for field.

@@ -51,7 +51,7 @@ var setterTemplate = fieldtmpl.Must("setter", `// {{.FuncPrefix}}{{.OptionName}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}{{if .SkipEmpty}}		if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
-{{end}}		o.{{.FieldName}} = {{.ValueExpr}}
+{{end}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
 {{- end}}{{- template "optionReturn" . }}
 	}
 }`)
@@ -68,7 +68,7 @@ func {{.FuncPrefix}}{{.OptionName}}[T interface{string|*string}](v T) {{.OptionT
  }
 {{.PipelineCode}}{{if not .Final}}
 {{if not .KeepEmptyStrings}} if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
-{{end}} o.{{.FieldName}} = {{.ValueExpr}}
+{{end}} {{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
 {{- end}}{{- template "optionReturn" . }}
  }
 }`)

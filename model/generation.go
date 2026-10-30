@@ -29,6 +29,32 @@ const (
 	CheckFailureSkip CheckFailureMode = "skip"
 )
 
+// SliceSetterMode selects the parameter of slice option functions.
+type SliceSetterMode string
+
+// Slice setter modes. The zero value is [SliceSetterVariadic].
+const (
+	// SliceSetterVariadic accepts elements: WithHosts(v ...string).
+	SliceSetterVariadic SliceSetterMode = "variadic"
+	// SliceSetterSlice accepts a slice: WithHosts(v []string).
+	SliceSetterSlice SliceSetterMode = "slice"
+)
+
+// DefaultsSource selects where defaultOptions takes its starting value from.
+type DefaultsSource string
+
+// Defaults sources. The zero value is [DefaultsFromTags].
+const (
+	// DefaultsFromTags starts from the zero value and applies tag and type defaults.
+	DefaultsFromTags DefaultsSource = "tag"
+	// DefaultsFromVar starts from a copy of the variable named DefaultsName.
+	DefaultsFromVar DefaultsSource = "var"
+	// DefaultsFromFunc starts from the result of the function named DefaultsName.
+	DefaultsFromFunc DefaultsSource = "func"
+	// DefaultsFromNone starts from the zero value and ignores every default.
+	DefaultsFromNone DefaultsSource = "none"
+)
+
 // Default option function prefixes used when the settings leave them empty.
 const (
 	DefaultFuncPrefix       = "With"
@@ -58,6 +84,21 @@ type RenderSettings struct {
 	KeepEmptyStrings bool
 	// CheckFailure applies when OptionReturnsError is false.
 	CheckFailure CheckFailureMode
+	// SliceSetter selects the parameter of slice options.
+	SliceSetter SliceSetterMode
+	// DefaultsFrom selects the starting value of defaultOptions; var and
+	// func sources name their declaration in DefaultsName. Tag and type
+	// defaults are applied on top, except for DefaultsFromNone.
+	DefaultsFrom DefaultsSource
+	DefaultsName string
+	// Validate checks every optcheck rule on the final value in newOptions,
+	// so unset fields and defaults are validated too. ValidateFuncName names
+	// the generated validation function.
+	Validate         bool
+	ValidateFuncName string
+	// WithIsSet records applied options in the struct field of type
+	// <TypeName>FieldSet and generates an isSet method.
+	WithIsSet bool
 }
 
 // OptionFuncPrefix returns FuncPrefix or [DefaultFuncPrefix].
@@ -77,6 +118,9 @@ type GenerateInput struct {
 	Imports             map[string]ImportInfo
 	NormalizationMethod string
 	GenericInfo         GenericInfo
+	// IsSetField names the struct field of type <TypeName>FieldSet that
+	// records applied options; empty when the struct declares none.
+	IsSetField string
 }
 
 // SourcePackage is the syntax adapter's result, before semantic preparation.
@@ -86,4 +130,5 @@ type SourcePackage struct {
 	Imports             map[string]ImportInfo
 	GenericInfo         GenericInfo
 	NormalizationMethod string
+	IsSetField          string
 }

@@ -22,6 +22,10 @@ type GenerationContext struct {
 	// PackageName is the name of the package being generated.
 	PackageName string
 
+	// IsSetField names the struct field recording applied options when
+	// WithIsSet is enabled.
+	IsSetField string
+
 	// AllFields contains all fields being generated.
 	AllFields []model.OptField
 
@@ -53,6 +57,11 @@ func NewGenerationContext(
 		GenericInfo:       genericInfo,
 		additionalImports: make(map[string]model.GeneratedImport),
 	}
+}
+
+// IsSetConst returns the name of the field-set constant of field.
+func (ctx *GenerationContext) IsSetConst(field model.OptField) string {
+	return ctx.TypeName + "Field" + field.OptionName
 }
 
 // IsGeneric returns true if generating for a generic struct.

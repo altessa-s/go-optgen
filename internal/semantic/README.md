@@ -13,6 +13,7 @@ default modifiers derived from plugin metadata.
 |-------------------|---------|--------------------------------------------------------------|
 | `WithPrefix`      | `""`    | Prepended to every option name before validation             |
 | `WithWarningSink` | `nil`   | Receives diagnostics, such as a check of a disabled plugin   |
+| `WithExclude` | none | Drops fields whose name matches a `path.Match` pattern |
 | `WithDefaultModifiers` | `true` | Applies the modifiers plugins declare for a type (trimspaces, notnil, ...) |
 
 ## Key types

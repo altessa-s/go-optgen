@@ -2,9 +2,6 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-// This file provides utility functions for parsing boolean and modifier values
-// from optgen tag strings. Supports common truthy representations (1, true, yes, y, on).
-
 package plugin
 
 import (

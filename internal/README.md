@@ -18,7 +18,7 @@ Package `internal` organizes the private implementation of optgen.
 ## Usage
 
 ```go
-commands.New()
+optgen.New()
 ```
 
 See [architecture](../docs/architecture.md) for dependency rules and [plugin API](../plugin/README.md) for extension contracts.

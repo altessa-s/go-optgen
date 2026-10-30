@@ -3,6 +3,10 @@
 
 package semantic
 
+import (
+	"strings"
+)
+
 // Option is a functional option for configuring options.
 type Option func(o *options)
 
@@ -10,6 +14,20 @@ type Option func(o *options)
 func WithDefaultModifiers(v bool) Option {
 	return func(o *options) {
 		o.defaultModifiers = v
+	}
+}
+
+// WithExclude sets the exclude option.
+func WithExclude(v ...string) Option {
+	return func(o *options) {
+		if len(v) == 0 {
+			return
+		}
+		transformed := make([]string, len(v))
+		for i, element := range v {
+			transformed[i] = strings.TrimSpace(element)
+		}
+		o.exclude = transformed
 	}
 }
 

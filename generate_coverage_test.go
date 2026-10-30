@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands_test
+package optgen_test
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/altessa-s/go-optgen/commands"
+	optgen "github.com/altessa-s/go-optgen"
 )
 
 // newPkgDir writes src as options.go into a fresh directory that is marked
@@ -29,7 +29,7 @@ func newPkgDir(tb testing.TB, src string) string {
 
 func execGenerate(tb testing.TB, args ...string) (string, error) {
 	tb.Helper()
-	cmd := commands.NewGenerate()
+	cmd := optgen.NewGenerate()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -258,7 +258,7 @@ func TestGenerate_ParseErrors(t *testing.T) {
 
 func TestListPlugins(t *testing.T) {
 	t.Parallel()
-	cmd := commands.New()
+	cmd := optgen.New()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)

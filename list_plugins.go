@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands
+package optgen
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ List registered field plugins and type default providers by type name.
 These names can be used with --disable-plugins.
 `),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			registry, err := newSessionRegistry(cmd.ErrOrStderr(), o, nil, nil)
+			registry, err := newSessionRegistry(warningSink(cmd.ErrOrStderr()), o, nil, nil)
 			if err != nil {
 				return err
 			}

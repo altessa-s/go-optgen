@@ -10,11 +10,18 @@ import (
 	"fmt"
 	"go/token"
 	"maps"
+	"path"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/altessa-s/go-optgen/model"
 	"github.com/altessa-s/go-optgen/plugin"
+
+	goparser "go/parser"
 )
 
 // Catalog supplies declaration policies without owning parsing or rendering.
@@ -39,13 +46,16 @@ func New(catalog Catalog, opts ...Option) *Preparer {
 // carry the configured prefix, checks of disabled plugins are dropped with a
 // warning, and type defaults and default modifiers are resolved.
 func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
-	out := slices.Clone(fields)
+	out := slices.DeleteFunc(slices.Clone(fields), p.excluded)
 	policy := newModifierPolicy(p.catalog.Descriptors())
 	if !p.options.defaultModifiers {
 		policy.defaults = nil
 	}
 	for i := range out {
 		f := &out[i]
+		if first, _ := utf8.DecodeRuneInString(f.FieldName); unicode.IsUpper(first) {
+			p.warn(fmt.Sprintf("field %s is exported; keep option fields unexported so callers configure through options", f.FieldName))
+		}
 		f.OptionName = p.options.prefix + f.OptionName
 		if !f.DefaultOnly && f.OptionName != "" && !token.IsIdentifier(f.OptionName) {
 			return nil, fmt.Errorf("field %s: invalid option name %q", f.FieldName, f.OptionName)
@@ -55,6 +65,8 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		}
 		if f.Default == "" {
 			f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
+		} else if f.Type == "time.Duration" {
+			f.Default = durationDefault(f.Default)
 		}
 		f.Modifiers = policy.modifiers(*f)
 		f.HasModifiers = len(f.Modifiers) > 0
@@ -172,4 +184,34 @@ func (p modifierPolicy) defaultsFor(typeStr string, existing []string) []string 
 func modifierKey(mod string) string {
 	key, _, _ := strings.Cut(mod, "=")
 	return strings.ToLower(strings.TrimSpace(key))
+}
+
+// excluded reports whether f matches an exclude pattern.
+func (p *Preparer) excluded(f model.OptField) bool {
+	return slices.ContainsFunc(p.options.exclude, func(pattern string) bool {
+		matched, err := path.Match(pattern, f.FieldName)
+		return err == nil && matched
+	})
+}
+
+// durationDefault rewrites a duration literal such as "30s" or "1h30m",
+// which is not a Go expression, into one such as 90 * time.Minute. Other
+// defaults are returned unchanged.
+func durationDefault(def string) string {
+	if _, err := goparser.ParseExpr(def); err == nil {
+		return def
+	}
+	d, err := time.ParseDuration(def)
+	if err != nil {
+		return def
+	}
+	for _, unit := range []struct {
+		d    time.Duration
+		name string
+	}{{time.Hour, "Hour"}, {time.Minute, "Minute"}, {time.Second, "Second"}, {time.Millisecond, "Millisecond"}, {time.Microsecond, "Microsecond"}} {
+		if d%unit.d == 0 {
+			return strconv.FormatInt(int64(d/unit.d), 10) + " * time." + unit.name
+		}
+	}
+	return "time.Duration(" + strconv.FormatInt(int64(d), 10) + ")"
 }

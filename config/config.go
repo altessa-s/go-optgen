@@ -105,6 +105,24 @@ type Defaults struct {
 	// TypeDefaults maps a field type, as written in the source, to its default
 	// expression, such as "*slog.Logger": "slog.Default()".
 	TypeDefaults map[string]string `yaml:"type-defaults,omitempty"`
+
+	// Validate checks optcheck rules on the final options in the constructor.
+	Validate bool `yaml:"validate,omitempty"`
+
+	// WithIsSet records applied options and generates an isSet method.
+	WithIsSet bool `yaml:"with-isset,omitempty"`
+
+	// Strict turns generation warnings into errors.
+	Strict bool `yaml:"strict,omitempty"`
+
+	// DefaultsFrom selects the defaults source: tag, var[=name], func[=name] or none.
+	DefaultsFrom string `yaml:"defaults-from,omitempty"`
+
+	// SliceSetter selects the slice option parameter: "variadic" or "slice".
+	SliceSetter string `yaml:"slice-setter,omitempty"`
+
+	// Exclude lists field name patterns (path.Match syntax) to skip.
+	Exclude []string `yaml:"exclude,omitempty"`
 }
 
 // PackageConfig contains per-package configuration overrides.
@@ -173,6 +191,24 @@ type PackageConfig struct {
 
 	// TypeDefaults adds or overrides type defaults for this package.
 	TypeDefaults map[string]string `yaml:"type-defaults,omitempty"`
+
+	// Validate checks optcheck rules on the final options in the constructor.
+	Validate *bool `yaml:"validate,omitempty"`
+
+	// WithIsSet records applied options and generates an isSet method.
+	WithIsSet *bool `yaml:"with-isset,omitempty"`
+
+	// Strict turns generation warnings into errors.
+	Strict *bool `yaml:"strict,omitempty"`
+
+	// DefaultsFrom selects the defaults source: tag, var[=name], func[=name] or none.
+	DefaultsFrom string `yaml:"defaults-from,omitempty"`
+
+	// SliceSetter selects the slice option parameter: "variadic" or "slice".
+	SliceSetter string `yaml:"slice-setter,omitempty"`
+
+	// Exclude lists field name patterns (path.Match syntax) to skip.
+	Exclude []string `yaml:"exclude,omitempty"`
 }
 
 // Load reads and parses an .optgen.yaml file at path.
@@ -319,11 +355,21 @@ func mergePackageConfig(defaults *Defaults, pkg PackageConfig) {
 	if pkg.NoDefaultModifiers != nil {
 		defaults.NoDefaultModifiers = *pkg.NoDefaultModifiers
 	}
+	for dst, src := range map[*bool]*bool{&defaults.Validate: pkg.Validate, &defaults.WithIsSet: pkg.WithIsSet, &defaults.Strict: pkg.Strict} {
+		if src != nil {
+			*dst = *src
+		}
+	}
+	if len(pkg.Exclude) > 0 {
+		defaults.Exclude = pkg.Exclude
+	}
 	for dst, src := range map[*string]string{
 		&defaults.FuncPrefix:       pkg.FuncPrefix,
 		&defaults.InvertFuncPrefix: pkg.InvertFuncPrefix,
 		&defaults.StringSetter:     pkg.StringSetter,
 		&defaults.CheckFailure:     pkg.CheckFailure,
+		&defaults.DefaultsFrom:     pkg.DefaultsFrom,
+		&defaults.SliceSetter:      pkg.SliceSetter,
 	} {
 		if src != "" {
 			*dst = src

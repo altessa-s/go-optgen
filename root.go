@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands
+package optgen
 
 import (
 	"github.com/MakeNowJust/heredoc"
@@ -65,7 +65,7 @@ func New(opts ...Option) *cobra.Command {
 // plugins wraps it in its main function:
 //
 //	func main() {
-//		if err := commands.Run(os.Args[1:], commands.WithPlugins(myplugins.Register)); err != nil {
+//		if err := optgen.Run(os.Args[1:], optgen.WithPlugins(myplugins.Register)); err != nil {
 //			os.Exit(1)
 //		}
 //	}

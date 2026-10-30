@@ -47,6 +47,8 @@ the filesystem root, stopping at the first `.optgen.yaml` or at a project bounda
 | `KeepEmptyStrings`| Assign empty strings instead of skipping them                                              |
 | `CheckFailure`    | Failed check without an error result: `panic` (default) or `skip`                          |
 | `NoDefaultModifiers` | Do not apply the modifiers plugins add by default                                       |
+| `Validate`, `WithIsSet`, `Strict` | `--validate`, `--with-isset` and `--strict` |
+| `DefaultsFrom`, `SliceSetter`, `Exclude` | `--defaults-from`, `--slice-setter` and `--exclude` |
 | `TypeDefaults`    | Default expression per field type, e.g. `"*slog.Logger": slog.Default()`; packages merge per key |
 
 YAML keys are kebab-case (`option-type`, `all-fields`, `disable-plugins`). `File.GetPackageConfig(pkgPath)` returns the `Defaults` merged with the

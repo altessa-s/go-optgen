@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands
+package optgen
 
 import (
 	"cmp"
@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -56,6 +57,13 @@ type generateSettings struct {
 	checkFailure     string
 	noDefaultMods    bool
 	typeDefaults     map[string]string // Configured type defaults (config only)
+	validate         bool
+	withIsSet        bool
+	strict           bool
+	defaultsFrom     string
+	sliceSetter      string
+	exclude          []string
+	sourceFile       string // Restrict the struct search to this file (CLI only)
 }
 
 // target is one struct to generate options for, with its resolved names.
@@ -131,6 +139,14 @@ func (s *generateSettings) applyConfig(flags changedFlags, cfg optconfig.Default
 	defaultBool(flags, "keep-empty-strings", &s.keepEmptyStrings, cfg.KeepEmptyStrings)
 	defaultBool(flags, "no-default-modifiers", &s.noDefaultMods, cfg.NoDefaultModifiers)
 	s.typeDefaults = cfg.TypeDefaults
+	defaultBool(flags, "validate", &s.validate, cfg.Validate)
+	defaultBool(flags, "with-isset", &s.withIsSet, cfg.WithIsSet)
+	defaultBool(flags, "strict", &s.strict, cfg.Strict)
+	defaultString(flags, "defaults-from", &s.defaultsFrom, cfg.DefaultsFrom)
+	defaultString(flags, "slice-setter", &s.sliceSetter, cfg.SliceSetter)
+	if len(cfg.Exclude) > 0 && !flags.Changed("exclude") {
+		s.exclude = cfg.Exclude
+	}
 }
 
 // defaultString sets *dst to a non-empty config value unless flag name was
@@ -274,6 +290,19 @@ func (s *generateSettings) validateNames() error {
 	default:
 		return fmt.Errorf("invalid check failure mode %q (want %s or %s)", s.checkFailure, model.CheckFailurePanic, model.CheckFailureSkip)
 	}
+	switch model.SliceSetterMode(s.sliceSetter) {
+	case "", model.SliceSetterVariadic, model.SliceSetterSlice:
+	default:
+		return fmt.Errorf("invalid slice setter %q (want %s or %s)", s.sliceSetter, model.SliceSetterVariadic, model.SliceSetterSlice)
+	}
+	if _, _, err := s.defaults(); err != nil {
+		return err
+	}
+	for _, pattern := range s.exclude {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return fmt.Errorf("invalid --exclude pattern %q: %w", pattern, err)
+		}
+	}
 	for _, name := range s.allowFormatters {
 		if strings.ContainsAny(name, `/\`) || strings.TrimSpace(name) == "" {
 			return fmt.Errorf("invalid --allow-formatter %q: want a command name resolved from PATH", name)
@@ -290,8 +319,35 @@ func capitalizeFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// defaults parses --defaults-from: tag (default), var[=name], func[=name] or
+// none. Var and func sources default to default<Type>Value and getDefault<Type>.
+func (s *generateSettings) defaults() (model.DefaultsSource, string, error) {
+	kind, name, _ := strings.Cut(s.defaultsFrom, "=")
+	switch source := model.DefaultsSource(kind); source {
+	case "", model.DefaultsFromTags, model.DefaultsFromNone:
+		if name != "" {
+			return "", "", fmt.Errorf("invalid defaults source %q: %s takes no name", s.defaultsFrom, kind)
+		}
+		return source, "", nil
+	case model.DefaultsFromVar, model.DefaultsFromFunc:
+		if name != "" && !token.IsIdentifier(name) {
+			return "", "", fmt.Errorf("invalid defaults source %q: %q is not a valid Go identifier", s.defaultsFrom, name)
+		}
+		return source, name, nil
+	default:
+		return "", "", fmt.Errorf("invalid defaults source %q (want tag, var[=name], func[=name] or none)", s.defaultsFrom)
+	}
+}
+
 // request builds the use-case request for t from the resolved settings.
 func (s *generateSettings) request(t target) application.Request {
+	source, name, _ := s.defaults() // validated by validateNames
+	switch {
+	case source == model.DefaultsFromVar && name == "":
+		name = "default" + capitalizeFirst(t.typeName) + "Value"
+	case source == model.DefaultsFromFunc && name == "":
+		name = "getDefault" + capitalizeFirst(t.typeName)
+	}
 	formatter := s.formatter
 	if s.noFormat {
 		formatter = ""
@@ -316,6 +372,11 @@ func (s *generateSettings) request(t target) application.Request {
 			StringSetter:        model.StringSetterMode(s.stringSetter),
 			KeepEmptyStrings:    s.keepEmptyStrings,
 			CheckFailure:        model.CheckFailureMode(s.checkFailure),
+			SliceSetter:         model.SliceSetterMode(s.sliceSetter),
+			DefaultsFrom:        source,
+			DefaultsName:        name,
+			Validate:            s.validate,
+			WithIsSet:           s.withIsSet,
 		},
 	}
 }

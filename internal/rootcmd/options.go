@@ -14,7 +14,7 @@ import (
 	_ "os"
 )
 
-//go:generate optgen generate --no-config --all-fields --no-format
+//go:generate optgen generate
 
 type options struct {
 	long        string           `optval:"notrim"`

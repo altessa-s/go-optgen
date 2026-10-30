@@ -48,6 +48,8 @@ type BaseData struct {
 	TypeParamsNames    string // "[T]" or "" for non-generic
 	FuncPrefix         string // Option function prefix, "With" by default
 	KeepEmptyStrings   bool   // Assign empty strings instead of skipping them
+	SliceParam         bool   // Slice options take a slice instead of variadic elements
+	MarkSet            string // Statement recording the applied option, or empty
 }
 
 // NewBaseData collects the template data for field from ctx.
@@ -61,6 +63,8 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 		TypeParamsNames:    ctx.TypeParamsNames(),
 		FuncPrefix:         ctx.OptionFuncPrefix(),
 		KeepEmptyStrings:   ctx.KeepEmptyStrings,
+		SliceParam:         ctx.SliceSetter == model.SliceSetterSlice,
+		MarkSet:            markSet(ctx, field),
 	}
 }
 
@@ -81,4 +85,13 @@ func NewData(ctx plugin.GenerationContext, field model.OptField, values plugin.P
 		code = "\t\t" + strings.ReplaceAll(result.Code, "\n", "\n\t\t") + "\n"
 	}
 	return Data{BaseData: NewBaseData(ctx, field), PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
+}
+
+// markSet returns the statement recording that the option of field was
+// applied, followed by a separator, or "" when WithIsSet is off.
+func markSet(ctx plugin.GenerationContext, field model.OptField) string {
+	if !ctx.WithIsSet || ctx.IsSetField == "" {
+		return ""
+	}
+	return "o." + ctx.IsSetField + " |= 1 << " + ctx.IsSetConst(field) + "; "
 }

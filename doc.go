@@ -2,7 +2,9 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-// Package commands implements the cobra-based CLI for the optgen code generator.
+// Package optgen implements the optgen code generator CLI as a library: the
+// optgen binary is a thin main around [Run], and programs that register their
+// own plugins call [Run] with [WithPlugins].
 //
 // The package exposes three entry points:
 //
@@ -15,6 +17,6 @@
 //
 // # Usage
 //
-//	cmd := commands.New()
+//	cmd := optgen.New()
 //	err := cmd.ExecuteContext(ctx)
-package commands
+package optgen

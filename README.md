@@ -56,12 +56,60 @@ The root command prints version information with `--version`.
 Settings are loaded from `.optgen.yaml`, searched from `--directory` (default `.`) up to the project root. Explicit CLI flags override corresponding
 config values. Per-package overrides use the `packages` map keyed by relative path; package-specific `disable-plugins` overrides global defaults.
 
+## Library API
+
+```go
+import optgen "github.com/altessa-s/go-optgen"
+```
+
+The root package implements the CLI; `cmd/optgen` is a thin `main` around `optgen.Run`.
+
+### Entry points
+
+| Function         | Description                                                                                 |
+|------------------|---------------------------------------------------------------------------------------------|
+| `New`            | Returns a `*cobra.Command` tree with the `generate` and `list-plugins` subcommands (`--version` flag on the root) |
+| `Run`            | Sets the given args, executes the root command, and returns any error                       |
+| `NewGenerate`    | Returns the `generate` subcommand for embedding in custom CLI trees                         |
+| `NewListPlugins` | Returns the `list-plugins` subcommand for embedding in custom CLI trees                     |
+
+### Options
+
+| Option        | Purpose                                                                                     |
+|---------------|---------------------------------------------------------------------------------------------|
+| `WithPlugins` | Registers additional plugins in every command execution, after the built-in plugins        |
+
+### Custom plugins
+
+Plugins are compiled into a program that wraps the CLI; there is no runtime plugin loading:
+
+```go
+// tools/optgen/main.go
+func main() {
+	if err := optgen.Run(os.Args[1:], optgen.WithPlugins(myplugins.Register)); err != nil {
+		os.Exit(1)
+	}
+}
+```
+
+```go
+//go:generate go run ./tools/optgen generate
+```
+
+### Configuration
+
+Configuration is loaded from `.optgen.yaml` (see `config.File`) unless `--no-config` is set. Explicit CLI flags override corresponding config
+values.
+
+Each execution assembles its own registry: the built-in plugins, the configured `type-defaults`, the plugins of `WithPlugins`, then
+`--disable-plugins`, which fails on an unknown name. Verbose
+progress lists every field with its final option name, prefix included.
+
 ## Subpackages
 
 | Package                      | Description                                                           |
 |------------------------------|-----------------------------------------------------------------------|
-| [cmd/optgen](./cmd/optgen)   | CLI entry point (`optgen` binary)                                     |
-| [commands](./commands)       | Cobra-based CLI with `generate` and `list-plugins`                    |
+| [cmd/optgen](./cmd/optgen)   | `optgen` binary: a `main` around `optgen.Run`; CLI flag reference     |
 | [config](./config)           | Loads and merges `.optgen.yaml` configuration with per-package overrides|
 | [model](./model)             | Public data structures (`OptField`, `GenericInfo`) shared across layers|
 | [plugin](./plugin)           | Public extension API: `FieldPlugin`, `TransformPlugin`, `Registry`    |

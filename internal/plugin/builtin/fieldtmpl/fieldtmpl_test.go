@@ -76,6 +76,10 @@ func TestExecuteSuccess(t *testing.T) {
 // stubPipeline returns a fixed pipeline result.
 type stubPipeline plugin.PipelineResult
 
+func (stubPipeline) BuildChecks(plugin.GenerationContext, model.OptField, string) []string {
+	return nil
+}
+
 func (s stubPipeline) BuildPipeline(plugin.GenerationContext, model.OptField, string) plugin.PipelineResult {
 	return plugin.PipelineResult(s)
 }

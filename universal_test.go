@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-package commands_test
+package optgen_test
 
 import (
 	"bytes"
@@ -12,9 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/altessa-s/go-optgen/commands"
 	"github.com/altessa-s/go-optgen/model"
 	"github.com/altessa-s/go-optgen/plugin"
+
+	optgen "github.com/altessa-s/go-optgen"
 )
 
 const twoTypesSource = "package sample\n" +
@@ -71,7 +72,7 @@ func TestGenerateConfiguredTypeDefaults(t *testing.T) {
 	require.Contains(t, out, "wait: 5 * time.Second")
 }
 
-// rename is an external transform registered through commands.WithPlugins.
+// rename is an external transform registered through optgen.WithPlugins.
 type rename struct{ plugin.TransformBase }
 
 func (rename) Apply(_ plugin.GenerationContext, _ model.OptField, _, expr string) (string, bool) {
@@ -84,7 +85,7 @@ func TestWithPluginsRegistersExternalPlugins(t *testing.T) {
 		return r.Register(&rename{TransformBase: plugin.NewTransformBase("rename", plugin.WithApplicableTypes("string"))})
 	}
 	dir := newPkgDir(t, "package sample\ntype options struct { name string `opt:\"Name\" optval:\"rename\"` }\n")
-	cmd := commands.New(commands.WithPlugins(register))
+	cmd := optgen.New(optgen.WithPlugins(register))
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -92,7 +93,7 @@ func TestWithPluginsRegistersExternalPlugins(t *testing.T) {
 	require.NoError(t, cmd.ExecuteContext(t.Context()))
 	require.Contains(t, out.String(), "renamed(")
 
-	cmd = commands.New(commands.WithPlugins(register))
+	cmd = optgen.New(optgen.WithPlugins(register))
 	out.Reset()
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"list-plugins"})

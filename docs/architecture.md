@@ -5,7 +5,7 @@ adapters. Required dependencies are explicit constructor parameters and each inv
 
 ```mermaid
 flowchart TD
-    CLI[commands: assembly and presentation] --> App[application: generation use case]
+    CLI[optgen root package: assembly and presentation] --> App[application: generation use case]
     CLI --> Source[source: filesystem and Go syntax]
     CLI --> Semantic[semantic: validation and defaults]
     CLI --> Generator[generator: rendering]
@@ -31,7 +31,7 @@ flowchart TD
 | `internal/source` | Load and type-check Go packages (`go/packages`), invoke syntax extraction with type facts | `model`, `internal/parser` |
 | `internal/output` | Run a formatter and atomically publish successful output | Standard library |
 | `internal/plugin/builtin` | Built-in plugins and their registration | `model`, `plugin` |
-| `commands` | Assemble implementations, load configuration/plugins, present progress | Inner packages and adapters |
+| `optgen` (module root) | Assemble implementations, load configuration/plugins, present progress | Inner packages and adapters |
 
 ## Decisions
 
@@ -47,7 +47,7 @@ flowchart TD
 | One pipeline | All field handlers share ordering, value propagation, and termination semantics. |
 | Syntax before semantics | Parsing remains deterministic regardless of registered extensions. |
 | Type facts through a parser port | The parser consumes `TypeResolver` facts; only the source adapter depends on `go/packages`. |
-| Plugins compiled in | Third-party plugins register through `commands.WithPlugins` in a wrapping `main`; nothing is loaded at runtime. |
+| Plugins compiled in | Third-party plugins register through `optgen.WithPlugins` in a wrapping `main`; nothing is loaded at runtime. |
 | Format before publication | Failed formatting preserves the previous generated file. |
 | Generated constructor options | Package tunables follow the same option conventions as generated consumers. |
 
