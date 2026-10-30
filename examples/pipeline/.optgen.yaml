@@ -1,0 +1,24 @@
+# The nearest .optgen.yaml wins: this file replaces the repository one for
+# this package.
+defaults:
+  all-fields: true
+  # Same import grouping as the repository .optgen.yaml, so make generate
+  # and make lint agree.
+  formatter: >-
+    gci write
+    -s standard
+    -s default
+    -s "prefix(github.com/altessa-s/go-optgen)"
+    -s blank
+    -s alias
+    {file}
+  # Start every default function from a package variable,
+  # default<Type>Value, then apply the default= tags on top of it.
+  defaults-from: var
+  # A failed optcheck keeps the previous value instead of panicking.
+  check-failure: skip
+  # Slice options take a slice instead of a variadic list.
+  slice-setter: slice
+  # Every time.Duration field without a default= tag starts at 30s.
+  type-defaults:
+    time.Duration: 30 * time.Second
