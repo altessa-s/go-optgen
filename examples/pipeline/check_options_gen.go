@@ -5,7 +5,6 @@ package pipeline
 
 import (
 	"strings"
-
 	"time"
 )
 

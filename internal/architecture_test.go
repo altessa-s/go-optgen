@@ -59,8 +59,8 @@ func TestDependencyDirection(t *testing.T) {
 				for _, imp := range file.Imports {
 					name, err := strconv.Unquote(imp.Path.Value)
 					require.NoError(t, err)
-					if strings.HasPrefix(name, module) {
-						require.Contains(t, allowed, strings.TrimPrefix(name, module), "forbidden outward dependency in %s", path)
+					if after, ok := strings.CutPrefix(name, module); ok {
+						require.Contains(t, allowed, after, "forbidden outward dependency in %s", path)
 					} else if !slices.Contains(externals[layer], name) {
 						first, _, _ := strings.Cut(name, "/")
 						require.NotContains(t, first, ".", "framework dependency in inner layer %s", path)

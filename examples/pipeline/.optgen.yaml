@@ -2,7 +2,16 @@
 # this package.
 defaults:
   all-fields: true
-  formatter: gofmt -w
+  # Same import grouping as the repository .optgen.yaml, so make generate
+  # and make lint agree.
+  formatter: >-
+    gci write
+    -s standard
+    -s default
+    -s "prefix(github.com/altessa-s/go-optgen)"
+    -s blank
+    -s alias
+    {file}
   # Start every default function from a package variable,
   # default<Type>Value, then apply the default= tags on top of it.
   defaults-from: var

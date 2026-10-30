@@ -5,6 +5,7 @@
 package plugin_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -92,12 +93,7 @@ func (m *mockTypeDefaultPlugin) Meta() plugin.Meta {
 }
 
 func (m *mockTypeDefaultPlugin) CanProvideDefault(typeStr string) bool {
-	for _, t := range m.types {
-		if t == typeStr {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.types, typeStr)
 }
 
 func (m *mockTypeDefaultPlugin) GetDefault(string) string { return m.value }
