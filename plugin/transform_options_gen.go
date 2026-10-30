@@ -3,7 +3,7 @@
 
 package plugin
 
-// Option is a functional option for configuring transformOptions.
+// TransformOption is a functional option for configuring transformOptions.
 type TransformOption func(o *transformOptions)
 
 // WithApplicableTypes sets the applicableTypes option.

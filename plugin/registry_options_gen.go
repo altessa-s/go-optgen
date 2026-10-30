@@ -3,7 +3,7 @@
 
 package plugin
 
-// Option is a functional option for configuring registryOptions.
+// RegistryOption is a functional option for configuring registryOptions.
 type RegistryOption func(o *registryOptions)
 
 // WithWarningSink sets the warningSink option.

@@ -3,7 +3,7 @@
 
 package plugin
 
-// Option is a functional option for configuring checkOptions.
+// CheckOption is a functional option for configuring checkOptions.
 type CheckOption func(o *checkOptions)
 
 // WithAliases sets the aliases option.

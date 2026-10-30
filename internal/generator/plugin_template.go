@@ -32,7 +32,7 @@ import (
 {{end}}
 
 {{if .GenerateOptionType}}
-// Option is a functional option for configuring {{.TypeName}}.
+// {{.OptionType}} is a functional option for configuring {{.TypeName}}.
 type {{.OptionType}}{{.GenericInfo.TypeParamsDecl}} func(o *{{.TypeName}}{{.GenericInfo.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}}
 
 {{end}}
