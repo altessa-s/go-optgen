@@ -1,0 +1,29 @@
+# Commit Scopes for go-optgen
+# Use these scopes in conventional commits: type(scope): description
+# Example: fix(internal/parser): keep field order stable
+
+# Root-level scopes
+root                        # Repository-wide changes (go.mod, Makefile, configs)
+deps                        # Dependency management
+README                      # Root README
+docs                        # Documentation
+
+# Packages
+cmd/optgen                  # optgen binary
+commands                    # CLI commands (generate)
+config                      # .optgen.yaml loading
+model                       # Parsed option model
+plugin                      # Public plugin API and registry
+internal/application        # Generation use case and ports
+internal/generator          # Code generation and templates
+internal/naming             # Option naming and initialisms
+internal/output             # Atomic file publication and formatting
+internal/parser             # Struct and tag parsing
+internal/plugin             # Built-in plugins (check, defaults, fields, guard, postprocess, transform)
+internal/rootcmd            # Cobra root command
+internal/semantic           # Policy preparation and check validation
+internal/source             # AST directory source adapter
+
+# Tooling
+devtools                    # Development tool dependencies
+ci                          # GitHub Actions workflows and scripts
