@@ -192,4 +192,3 @@ type options struct {
 ## See Also
 
 - [Architecture](../../docs/architecture.md) - Layer boundaries and dependency rules
-- [AGENTS.md](../../AGENTS.md#options-pattern) - Options pattern conventions
