@@ -81,7 +81,8 @@ The root package implements the CLI; `cmd/optgen` is a thin `main` around `optge
 
 ### Custom plugins
 
-Plugins are compiled into a program that wraps the CLI; there is no runtime plugin loading:
+Plugins are compiled into a program that wraps the CLI; there is no runtime plugin loading (complete example:
+[examples/customplugin](./examples/customplugin)):
 
 ```go
 // tools/optgen/main.go
@@ -120,6 +121,7 @@ progress lists every field with its final option name, prefix included.
 | `internal/naming`            | Derives option names from field names, with initialism handling       |
 | `internal/source`            | Filesystem AST source adapter                                         |
 | `internal/output`            | Atomic output publication and allowlisted code formatting             |
+| [examples](./examples)       | Runnable examples: strict validation, generics, several types, custom plugins |
 
 ## Architecture
 
