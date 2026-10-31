@@ -120,6 +120,12 @@ optgen list-plugins
 
 ## Configuration
 
+Configuration lookup starts in the generation directory and searches upward for the nearest `.optgen.yaml`.
+It searches through nested modules up to and including the first directory containing `.git` (a directory or a worktree file),
+never reading configuration above that boundary. A nested configuration takes precedence over a repository configuration.
+Outside a Git repository, lookup stops at the nearest `go.mod`, or at the filesystem root if no `go.mod` exists.
+Paths in `packages:` are relative to the directory containing the selected configuration, including for nested modules.
+
 Create `.optgen.yaml` in your project root:
 
 ```yaml
