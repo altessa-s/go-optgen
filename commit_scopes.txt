@@ -1,14 +1,16 @@
 # Commit Scopes for go-optgen
 # Use these scopes in conventional commits: type(scope): description
+# The scope is optional: omit it for repository-wide changes. Never use `root`.
+# Only the first word of a non-comment line is a scope.
 # Example: fix(internal/parser): keep field order stable
 
-# Root-level scopes
-root                        # Root package optgen (CLI) and repository-wide changes (go.mod, Makefile, configs)
-deps                        # Dependency management
+# Repository scopes
+deps                        # Dependency updates (Dependabot writes build(deps): bump ...)
 README                      # Root README
 docs                        # Documentation
 
 # Packages
+optgen                      # Root package: the generate API
 cmd/optgen                  # optgen binary
 config                      # .optgen.yaml loading
 model                       # Parsed option model
