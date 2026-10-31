@@ -9,7 +9,7 @@ require (
 	github.com/mibk/dupl v1.0.0
 	github.com/securego/gosec/v2 v2.29.0
 	golang.org/x/perf v0.0.0-20261009192801-be2c69fb417e
-	golang.org/x/vuln v1.1.4
+	golang.org/x/vuln v1.9.0
 )
 
 require (
@@ -244,7 +244,7 @@ require (
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/telemetry v0.0.0-20261009151841-97e8ea77aa2a // indirect
+	golang.org/x/telemetry v0.0.0-20261010193011-f71dc92da45e // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	google.golang.org/api v0.293.0 // indirect
