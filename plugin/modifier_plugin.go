@@ -60,18 +60,18 @@ type ModifierResult struct {
 }
 
 // ModifierPlugin is the unified interface for all value modifiers.
-// Modifiers are collected from optgen, optval, and optcheck tags
-// and executed in phase order.
+// Modifiers are collected from optgen metadata and optval tags and executed
+// in phase order; optcheck keys address [CheckPlugin]s only.
 //
 // Pipeline execution order:
 //  1. PhaseGuard: Early return checks (e.g., notnil)
 //  2. PhaseTransform: Value modifications (e.g., lower, upper, trimspaces)
 //  3. PhasePostProcess: Cleanup operations (e.g., dedup, nonempty)
-//  4. PhaseCheck: Validation (e.g., required, minlen, maxlen)
+//  4. PhaseCheck: Validation, including the code of optcheck plugins
 type ModifierPlugin interface {
 	PluginMeta
 
-	// Key returns the modifier name used in tags (e.g., "lower", "dedup", "required").
+	// Key returns the modifier name used in tags (e.g., "lower", "dedup", "notnil").
 	Key() string
 
 	// Phase returns when this modifier runs in the pipeline.

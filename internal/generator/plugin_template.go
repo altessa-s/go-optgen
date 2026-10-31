@@ -143,7 +143,7 @@ func {{.ValidateFuncName}}{{.GenericInfo.TypeParamsDecl}}(o *{{.TypeName}}{{.Gen
 
 // renderPluginTemplate executes [pluginOptionsTemplate] with the given data and
 // passes the result through go/format.Source. If formatting fails the raw
-// template output is discarded and the error is wrapped for debugging.
+// template output is discarded and the formatting error is returned wrapped.
 func (g *Generator) renderPluginTemplate(data any) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := pluginOptionsTemplate.Execute(&buf, data); err != nil {
@@ -151,7 +151,6 @@ func (g *Generator) renderPluginTemplate(data any) ([]byte, error) {
 	}
 	out, err := format.Source(buf.Bytes())
 	if err != nil {
-		// Keep the raw output to aid debugging.
 		return nil, fmt.Errorf("failed to format generated code: %w", err)
 	}
 	return out, nil
