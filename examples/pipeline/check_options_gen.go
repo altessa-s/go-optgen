@@ -21,9 +21,9 @@ func WithForbidden(v []string) CheckOption {
 		for i, element := range v {
 			transformed[i] = strings.ToLower(strings.TrimSpace(element))
 		}
+		deduped := make([]string, 0, len(transformed))
 		{
 			seen := make(map[string]struct{}, len(transformed))
-			deduped := make([]string, 0, len(transformed))
 			for _, item := range transformed {
 				if _, ok := seen[item]; ok {
 					continue
@@ -31,9 +31,8 @@ func WithForbidden(v []string) CheckOption {
 				seen[item] = struct{}{}
 				deduped = append(deduped, item)
 			}
-			transformed = deduped
 		}
-		o.forbidden = transformed
+		o.forbidden = deduped
 	}
 }
 

@@ -79,6 +79,47 @@ func typeCheckGenerated(tb testing.TB, relDir string, generated []byte) {
 	require.NoError(tb, err, "generated options must type-check")
 }
 
+// requireParamsNotReassigned fails when the closure returned by a generated
+// option function assigns to one of that function's parameters. The closure
+// captures them, and an Option value may be applied many times, concurrently:
+// reassigning a parameter is a data race and makes a second application see
+// the first one's result.
+func requireParamsNotReassigned(tb testing.TB, generated []byte) {
+	tb.Helper()
+
+	file, err := parser.ParseFile(token.NewFileSet(), "options_gen.go", generated, 0)
+	require.NoError(tb, err, "parse generated output")
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		params := map[string]bool{}
+		for _, field := range fn.Type.Params.List {
+			for _, name := range field.Names {
+				params[name.Name] = true
+			}
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			lit, ok := n.(*ast.FuncLit)
+			if !ok {
+				return true
+			}
+			ast.Inspect(lit.Body, func(n ast.Node) bool {
+				if assign, ok := n.(*ast.AssignStmt); ok && assign.Tok == token.ASSIGN {
+					for _, lhs := range assign.Lhs {
+						if id, ok := lhs.(*ast.Ident); ok && params[id.Name] {
+							tb.Errorf("%s: the option closure reassigns the captured parameter %s", fn.Name.Name, id.Name)
+						}
+					}
+				}
+				return true
+			})
+			return false
+		})
+	}
+}
+
 func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName, goldenName string) []byte {
 	tb.Helper()
 
@@ -120,6 +161,7 @@ func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName,
 	})
 	require.NoError(tb, err, "Generate")
 	require.NotContains(tb, string(got), `"github.com/altessa-s/`, "generated code must not import altessa-s modules")
+	requireParamsNotReassigned(tb, got)
 
 	goldenPath := filepath.Join(dir, goldenName)
 	if os.Getenv("UPDATE_GOLDEN") == "1" {

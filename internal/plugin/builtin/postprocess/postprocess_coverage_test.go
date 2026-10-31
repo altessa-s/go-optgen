@@ -50,9 +50,9 @@ func TestDedupModifier(t *testing.T) {
 	ctx := newCtx(false)
 	res := m.Generate(ctx, model.OptField{ElemType: "string"}, "xs")
 	require.Equal(t, []string{
+		"deduped := make([]string, 0, len(xs))",
 		"{",
 		"  seen := make(map[string]struct{}, len(xs))",
-		"  deduped := make([]string, 0, len(xs))",
 		"  for _, item := range xs {",
 		"    if _, ok := seen[item]; ok {",
 		"      continue",
@@ -60,12 +60,15 @@ func TestDedupModifier(t *testing.T) {
 		"    seen[item] = struct{}{}",
 		"    deduped = append(deduped, item)",
 		"  }",
-		"  xs = deduped",
 		"}",
 	}, res.Code)
-	require.Equal(t, "xs", res.OutputVar)
+	require.Equal(t, "deduped", res.OutputVar, "the result is a new variable; the input is never reassigned")
 	require.False(t, res.Final)
 	require.Empty(t, ctx.GetAdditionalImports(), "deduplication needs no imports")
+
+	res = m.Generate(newCtx(false), model.OptField{ElemType: "string"}, "deduped")
+	require.Equal(t, "deduped2 := make([]string, 0, len(deduped))", res.Code[0])
+	require.Equal(t, "deduped2", res.OutputVar, "the output name avoids the input's")
 }
 
 func TestNonEmptyModifier(t *testing.T) {
@@ -88,12 +91,15 @@ func TestNonEmptyModifier(t *testing.T) {
 		require.Equal(t, "v", res.OutputVar)
 	})
 
-	t.Run("string slice filters in place", func(t *testing.T) {
+	t.Run("string slice filters into a new slice", func(t *testing.T) {
 		t.Parallel()
 		field := model.OptField{Type: "[]string", IsSlice: true, ElemType: "string"}
 		res := m.Generate(newCtx(false), field, "v")
 		require.Equal(t, "nonEmpty := make([]string, 0, len(v))", res.Code[0])
-		require.Equal(t, "v = nonEmpty", res.Code[len(res.Code)-1])
+		require.Equal(t, "nonEmpty", res.OutputVar, "the result is a new variable")
+		for _, line := range res.Code {
+			require.NotContains(t, line, "v = ", "the input is never reassigned")
+		}
 		require.False(t, res.Final)
 	})
 
@@ -102,7 +108,7 @@ func TestNonEmptyModifier(t *testing.T) {
 		field := model.OptField{Type: "[]string", IsSlice: true, ElemType: "string"}
 		res := m.Generate(newCtx(false), field, "nonEmpty")
 		require.Equal(t, "nonEmpty2 := make([]string, 0, len(nonEmpty))", res.Code[0])
-		require.Equal(t, "nonEmpty = nonEmpty2", res.Code[len(res.Code)-1])
+		require.Equal(t, "nonEmpty2", res.OutputVar)
 	})
 
 	t.Run("unsupported type is a no-op", func(t *testing.T) {

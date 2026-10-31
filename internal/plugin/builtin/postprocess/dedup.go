@@ -23,11 +23,12 @@ const (
 // Tag usage: optval:"dedup" (explicit) or automatic for comparable slices
 // To disable: optval:"nodup"
 //
-// Generated code keeps the first occurrence of each element:
+// Generated code keeps the first occurrence of each element in a new slice,
+// which becomes the output; the input is never reassigned:
 //
+//	deduped := make([]string, 0, len(v))
 //	{
 //		seen := make(map[string]struct{}, len(v))
-//		deduped := make([]string, 0, len(v))
 //		for _, item := range v {
 //			if _, ok := seen[item]; ok {
 //				continue
@@ -35,7 +36,6 @@ const (
 //			seen[item] = struct{}{}
 //			deduped = append(deduped, item)
 //		}
-//		v = deduped
 //	}
 type DedupModifier struct{}
 
@@ -93,24 +93,30 @@ func isComparableType(typeStr string) bool {
 	return false
 }
 
-// Generate produces deduplication code that allocates a new slice, so the
-// caller's variadic argument is never modified.
+// Generate produces deduplication code that allocates a new slice and returns
+// it as the output. The input variable is never reassigned: it is the
+// option's captured variadic argument, and an Option value may be applied many
+// times, concurrently (reassigning it was a data race and made a second
+// application see the already deduplicated slice).
 func (m *DedupModifier) Generate(_ plugin.GenerationContext, field model.OptField, inputVar string) plugin.ModifierResult {
+	out := "deduped"
+	if inputVar == out {
+		out = "deduped2"
+	}
 	return plugin.ModifierResult{
 		Code: []string{
+			out + " := make([]" + field.ElemType + ", 0, len(" + inputVar + "))",
 			"{",
 			"  seen := make(map[" + field.ElemType + "]struct{}, len(" + inputVar + "))",
-			"  deduped := make([]" + field.ElemType + ", 0, len(" + inputVar + "))",
 			"  for _, item := range " + inputVar + " {",
 			"    if _, ok := seen[item]; ok {",
 			"      continue",
 			"    }",
 			"    seen[item] = struct{}{}",
-			"    deduped = append(deduped, item)",
+			"    " + out + " = append(" + out + ", item)",
 			"  }",
-			"  " + inputVar + " = deduped",
 			"}",
 		},
-		OutputVar: inputVar,
+		OutputVar: out,
 	}
 }
