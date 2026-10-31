@@ -6,7 +6,7 @@ require (
 	github.com/altessa-s/go-copyright-checker v1.1.0
 	github.com/daixiang0/gci v0.13.7
 	github.com/golangci/golangci-lint/v2 v2.15.0
-	github.com/mibk/dupl v1.0.0
+	github.com/mibk/dupl v1.1.0
 	github.com/securego/gosec/v2 v2.29.0
 	golang.org/x/perf v0.0.0-20261009192801-be2c69fb417e
 	golang.org/x/vuln v1.1.4
