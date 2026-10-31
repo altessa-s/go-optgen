@@ -14,13 +14,21 @@ type FieldSelector interface {
 	FindPlugin(model.OptField) (plugin.FieldPlugin, error)
 }
 
+// Pipeline is the value pipeline passed to field plugins plus the check
+// rendering that the generated validation function needs.
+type Pipeline interface {
+	plugin.Pipeline
+	// BuildChecks renders only the field's optcheck validations of valueVar.
+	BuildChecks(ctx plugin.GenerationContext, field model.OptField, valueVar string) []string
+}
+
 // Generator renders prepared fields using explicitly supplied plugins.
 type Generator struct {
 	plugins  FieldSelector
-	pipeline plugin.Pipeline
+	pipeline Pipeline
 }
 
 // New creates a renderer with a required plugin catalog.
-func New(plugins FieldSelector, pipeline plugin.Pipeline) *Generator {
+func New(plugins FieldSelector, pipeline Pipeline) *Generator {
 	return &Generator{plugins: plugins, pipeline: pipeline}
 }

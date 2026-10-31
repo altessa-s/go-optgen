@@ -16,8 +16,6 @@ import (
 // Pipeline produces the value-processing code consumed by field renderers.
 type Pipeline interface {
 	BuildPipeline(GenerationContext, model.OptField, string) PipelineResult
-	// BuildChecks renders only the field's optcheck validations of valueVar.
-	BuildChecks(ctx GenerationContext, field model.OptField, valueVar string) []string
 }
 
 // ValuePlugins provides only the queries needed by pipeline execution.
