@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/altessa-s/go-copyright-checker v1.1.0
-	github.com/daixiang0/gci v0.13.7
+	github.com/daixiang0/gci v0.14.0
 	github.com/golangci/golangci-lint/v2 v2.15.0
 	github.com/mibk/dupl v1.0.0
 	github.com/securego/gosec/v2 v2.29.0
