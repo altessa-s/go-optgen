@@ -13,16 +13,10 @@ import (
 	"github.com/altessa-s/go-optgen/plugin"
 )
 
-// numericTypes lists the types supported by numeric checks.
-var numericTypes = []string{
-	"int", "int8", "int16", "int32", "int64",
-	"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
-	"float32", "float64",
-	"time.Duration",
+// valueTypes returns well-known types that can never hold nil.
+func valueTypes() []string {
+	return append([]string{"bool", "byte", "rune", "complex64", "complex128", "time.Time"}, plugin.NumericTypes()...)
 }
-
-// valueTypes lists well-known types that can never hold nil.
-var valueTypes = append([]string{"bool", "byte", "rune", "complex64", "complex128", "time.Time"}, numericTypes...)
 
 // buildFail renders the statement reporting a failed check: an error result,
 // or for options without one a panic or, in [model.CheckFailureSkip] mode, a
@@ -50,13 +44,7 @@ func canBeNil(field model.OptField) bool {
 	if field.TypeResolved {
 		return field.IsNilable
 	}
-	return !slices.Contains(valueTypes, field.Type) && !strings.HasPrefix(field.Type, "[") && !strings.HasPrefix(field.Type, "struct")
-}
-
-// isNumeric reports whether field has an integer or floating-point type,
-// including named types such as time.Duration or a type Port int.
-func isNumeric(field model.OptField) bool {
-	return !field.IsSlice && (field.IsNumeric || slices.Contains(numericTypes, field.Type))
+	return !slices.Contains(valueTypes(), field.Type) && !strings.HasPrefix(field.Type, "[") && !strings.HasPrefix(field.Type, "struct")
 }
 
 func validateLenBound(field model.OptField) error {

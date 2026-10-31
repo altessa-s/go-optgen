@@ -23,8 +23,8 @@ type NonZeroCheck struct {
 
 // Validate accepts the numeric types listed on [NonZeroCheck].
 func (c *NonZeroCheck) Validate(field model.OptField, _ string) error {
-	if !isNumeric(field) {
-		return notApplicable(field, strings.Join(numericTypes, ", "))
+	if !plugin.IsNumericField(field) {
+		return notApplicable(field, strings.Join(plugin.NumericTypes(), ", "))
 	}
 	return nil
 }
