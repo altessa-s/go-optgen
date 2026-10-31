@@ -5,8 +5,8 @@
 /.mcp.json
 /.claude/
 /.ai-factory*
-/CLAUDE.md
 /AGENTS.md
+/CLAUDE.md
 /CHANGELOG.md
 *_PLAN.md
 /graphify-out/
@@ -21,10 +21,7 @@
 go.work
 go.work.sum
 
-tools/codegen/goconfig/goconfig
-tools/codegen/optgen/optgen
 /bin/
-/plugin-sign
 build/
 dist/
 
@@ -50,3 +47,7 @@ vendor/
 
 tmp/
 /plans/
+
+# Project binaries
+/optgen
+cmd/optgen/optgen
