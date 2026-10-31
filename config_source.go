@@ -20,39 +20,46 @@ func readConfigFile(path string) (*optconfig.File, error) {
 	return optconfig.Parse(data)
 }
 
-// findConfigFile searches for .optgen.yaml starting from startDir and walking
-// parent directories up to the project root (identified by go.mod or .git).
+// findConfigFile searches upward from startDir for the nearest .optgen.yaml.
+// The search includes and stops at the nearest .git directory or file, crossing
+// nested go.mod boundaries. Without a .git ancestor, it stops at the nearest
+// go.mod instead, or at the filesystem root if neither marker exists.
 //
-// It returns (configPath, projectRoot). If no config file is found but a
-// project root exists, configPath is empty and projectRoot is set. If
-// neither is found (e.g. filesystem root reached), both are empty.
+// It returns (configPath, projectRoot). When a config is found, projectRoot is
+// its directory. Otherwise, projectRoot is the nearest go.mod directory within
+// the repository, falling back to the .git directory or empty if neither exists.
 func findConfigFile(startDir string) (configPath, projectRoot string) {
-	dir, err := filepath.Abs(startDir)
+	start, err := filepath.Abs(startDir)
 	if err != nil {
 		return "", ""
 	}
-	for {
+
+	// Locate the repository boundary before deciding whether to cross go.mod.
+	boundary := ""
+	for dir := start; ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil && projectRoot == "" {
+			projectRoot = dir
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			boundary = dir
+			if projectRoot == "" {
+				projectRoot = dir
+			}
+			break
+		}
+		if filepath.Dir(dir) == dir {
+			boundary = projectRoot
+			break
+		}
+	}
+
+	for dir := start; ; dir = filepath.Dir(dir) {
 		configPath := filepath.Join(dir, optconfig.ConfigFileName)
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, dir
 		}
-		if isProjectRoot(dir) {
-			return "", dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", ""
-		}
-		dir = parent
-	}
-}
-
-// isProjectRoot reports whether dir contains go.mod or .git.
-func isProjectRoot(dir string) bool {
-	for _, marker := range []string{"go.mod", ".git"} {
-		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
-			return true
+		if dir == boundary || filepath.Dir(dir) == dir {
+			return "", projectRoot
 		}
 	}
-	return false
 }

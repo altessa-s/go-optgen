@@ -91,3 +91,35 @@ func TestGenerate_NoTaggedStruct(t *testing.T) {
 	cmd.SetArgs([]string{"--directory", dir, "--no-config", "--no-format"})
 	require.ErrorContains(t, cmd.ExecuteContext(t.Context()), "no struct with name 'options' and opt tags found")
 }
+
+func TestGenerate_NestedModuleConfig(t *testing.T) {
+	t.Parallel()
+	for _, pkg := range []string{"providers/s3", "providers/s3/client"} {
+		t.Run(pkg, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			dir := filepath.Join(root, filepath.FromSlash(pkg))
+			require.NoError(t, os.MkdirAll(dir, 0o750))
+			files := map[string]string{
+				".git":                "gitdir: /unused/worktree\n",
+				"go.mod":              "module example.com/root\n",
+				"providers/s3/go.mod": "module example.com/root/providers/s3\n",
+				pkg + "/options.go":   "package sample\n\ntype options struct { retries int }\n",
+				".optgen.yaml": "defaults:\n  all-fields: true\n  no-format: true\n" +
+					"packages:\n  " + pkg + ":\n    option-prefix: Root\n    output: root_gen.go\n",
+			}
+			for name, content := range files {
+				require.NoError(t, os.WriteFile(filepath.Join(root, filepath.FromSlash(name)), []byte(content), 0o600))
+			}
+
+			out, err := execGenerate(t, "--directory", dir, "--verbose")
+			require.NoError(t, err)
+			require.Contains(t, out, "Loaded config from: "+filepath.Join(root, ".optgen.yaml"))
+			content, err := os.ReadFile(filepath.Join(dir, "root_gen.go"))
+			require.NoError(t, err)
+			require.Contains(t, string(content), "func WithRootRetries(")
+			require.NotContains(t, string(content), "func WithRetries(")
+			require.NoFileExists(t, filepath.Join(dir, "options_gen.go"))
+		})
+	}
+}
