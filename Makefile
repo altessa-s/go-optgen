@@ -42,7 +42,11 @@ all: help
 .PHONY: fmt
 fmt: tidy  ## Run go fmt on all go files
 	@go -C devtools build -o $(CURDIR)/bin/gci github.com/daixiang0/gci
-	@$(CURDIR)/bin/gci write \
+	@# go list prints nothing when any package fails to load (a half-written
+	@# file is enough); stop there instead of running gci without paths.
+	@dirs=$$(go list -f '{{.Dir}}' ./...) || { echo "fmt: go list failed, see the errors above" >&2; exit 1; }; \
+	if [ -z "$$dirs" ]; then echo "fmt: go list found no packages" >&2; exit 1; fi; \
+	$(CURDIR)/bin/gci write \
 	    -s standard \
 	    -s default \
 	    -s "prefix(google.golang.org)" \
@@ -50,7 +54,7 @@ fmt: tidy  ## Run go fmt on all go files
 	    -s "prefix(github.com/altessa-s/go-optgen)" \
 	    -s "prefix(github.com/altessa-s)" \
 	    -s blank -s alias \
-	 $$(go list -f {{.Dir}} ./...)
+	    $$dirs
 
 .PHONY: lint
 lint: tidy fmt ## Run linter
@@ -137,6 +141,10 @@ bench: ## Run all benchmarks
 bench-count: ## Run benchmarks multiple times for benchstat (COUNT=5)
 	@go test -bench=. -benchmem -run=^$$ -count=$${COUNT:-5} ./... | tee bench.txt
 	@echo "Results saved to bench.txt (use benchstat bench.txt)"
+
+.PHONY: bench-compare
+bench-compare: ## Compare benchmarks with BASE (default origin/develop); fails on regressions above BENCH_THRESHOLD%
+	@bash .github/scripts/bench-regression.sh $${BASE:-origin/develop}
 
 .PHONY: fuzz-inputs
 fuzz-inputs: # Refuse FUZZTIME and FUZZPKG outside their allowlists
