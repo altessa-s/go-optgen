@@ -136,23 +136,22 @@ func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName,
 	result, err := optparser.FindOptFields(pkg, "options", false, nil)
 	require.NoError(tb, err, "FindOptFields")
 
-	normalizationMethod := optparser.FindNormalizationMethod(pkg, "options")
+	normalizationMethod, err := optparser.FindNormalizationMethod(pkg, "options")
+	require.NoError(tb, err, "FindNormalizationMethod")
 
 	r := testRegistry()
 	result.Fields, err = semantic.New(r).Prepare(result.Fields)
 	require.NoError(tb, err)
 	g := generator.New(r, plugin.NewPipeline(r))
 	got, err := g.Generate(model.GenerateInput{
-		RenderSettings: model.RenderSettings{
-			TypeName:            "options",
-			OptionType:          "Option",
-			GenerateOptionType:  true,
-			GenerateDefaultFunc: true,
-			GenerateNewFunc:     true,
-			OptionReturnsError:  optionReturnsError,
-			DefaultFuncName:     "defaultOptions",
-			NewFuncName:         "newOptions",
-		},
+		TypeName:            "options",
+		OptionType:          "Option",
+		GenerateOptionType:  true,
+		GenerateDefaultFunc: true,
+		GenerateNewFunc:     true,
+		OptionReturnsError:  optionReturnsError,
+		DefaultFuncName:     "defaultOptions",
+		NewFuncName:         "newOptions",
 		PackageName:         pkgName,
 		Fields:              result.Fields,
 		Imports:             result.Imports,
