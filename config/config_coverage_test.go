@@ -5,9 +5,6 @@
 package config_test
 
 import (
-	"io/fs"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,18 +12,10 @@ import (
 	"github.com/altessa-s/go-optgen/config"
 )
 
-func writeFile(tb testing.TB, path, content string) {
-	tb.Helper()
-	require.NoError(tb, os.MkdirAll(filepath.Dir(path), 0o750))
-	require.NoError(tb, os.WriteFile(path, []byte(content), 0o600))
-}
-
-func TestLoad(t *testing.T) {
+func TestParse(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	path := filepath.Join(dir, config.ConfigFileName)
-	writeFile(t, path, `
+	cfg, err := config.Parse([]byte(`
 defaults:
   type: options
   output: options_gen.go
@@ -37,9 +26,7 @@ defaults:
 packages:
   pkg/a:
     type: settings
-`)
-
-	cfg, err := config.Load(path)
+`))
 	require.NoError(t, err)
 	require.Equal(t, "options", cfg.Defaults.Type)
 	require.Equal(t, "options_gen.go", cfg.Defaults.Output)
@@ -50,62 +37,14 @@ packages:
 	require.Equal(t, "settings", cfg.Packages["pkg/a"].Type)
 }
 
-func TestLoadErrors(t *testing.T) {
+func TestParseErrors(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-
-	_, err := config.Load(filepath.Join(dir, "missing.yaml"))
-	require.ErrorIs(t, err, fs.ErrNotExist)
-
-	bad := filepath.Join(dir, "bad.yaml")
-	writeFile(t, bad, "defaults: [not, a, map]\n")
-	_, err = config.Load(bad)
+	_, err := config.Parse([]byte("defaults: [not, a, map]\n"))
 	require.Error(t, err)
 
-	plugins := filepath.Join(dir, "plugins.yaml")
-	writeFile(t, plugins, "defaults:\n  plugins: [x.so]\n")
-	_, err = config.Load(plugins)
+	_, err = config.Parse([]byte("defaults:\n  plugins: [x.so]\n"))
 	require.ErrorIs(t, err, config.ErrPluginsUnsupported)
-}
-
-func TestFindConfigFile(t *testing.T) {
-	t.Parallel()
-
-	t.Run("config found in ancestor", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "go.mod"), "module x\n")
-		writeFile(t, filepath.Join(root, config.ConfigFileName), "defaults: {}\n")
-		deep := filepath.Join(root, "a", "b")
-		require.NoError(t, os.MkdirAll(deep, 0o750))
-
-		cfgPath, projectRoot := config.FindConfigFile(deep)
-		require.Equal(t, filepath.Join(root, config.ConfigFileName), cfgPath)
-		require.Equal(t, root, projectRoot)
-	})
-
-	t.Run("project root via go.mod without config", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "go.mod"), "module x\n")
-		sub := filepath.Join(root, "sub")
-		require.NoError(t, os.MkdirAll(sub, 0o750))
-
-		cfgPath, projectRoot := config.FindConfigFile(sub)
-		require.Empty(t, cfgPath)
-		require.Equal(t, root, projectRoot)
-	})
-
-	t.Run("project root via .git", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o750))
-
-		cfgPath, projectRoot := config.FindConfigFile(root)
-		require.Empty(t, cfgPath)
-		require.Equal(t, root, projectRoot)
-	})
 }
 
 func TestGetPackageConfig(t *testing.T) {

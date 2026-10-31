@@ -77,11 +77,11 @@ type changedFlags interface{ Changed(name string) bool }
 // loadConfig finds .optgen.yaml for the target directory and applies the
 // configuration of that package to flags not set on the command line.
 func (s *generateSettings) loadConfig(flags changedFlags, out io.Writer) error {
-	configPath, projectRoot := optconfig.FindConfigFile(s.directory)
+	configPath, projectRoot := findConfigFile(s.directory)
 	if configPath == "" {
 		return nil
 	}
-	cfg, err := optconfig.Load(configPath)
+	cfg, err := readConfigFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config %s: %w", configPath, err)
 	}

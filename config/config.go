@@ -6,9 +6,7 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
@@ -211,16 +209,10 @@ type PackageConfig struct {
 	Exclude []string `yaml:"exclude,omitempty"`
 }
 
-// Load reads and parses an .optgen.yaml file at path.
-// Returns the parsed [File] or an error if the file cannot be read or contains
-// invalid YAML. A defaults.plugins list is rejected with [ErrPluginsUnsupported]:
-// external plugins are not supported.
-func Load(path string) (*File, error) {
-	data, err := os.ReadFile(filepath.Clean(path)) // #nosec G304 -- Config file path comes from CLI flag or parent-directory discovery.
-	if err != nil {
-		return nil, err
-	}
-
+// Parse decodes the contents of an .optgen.yaml file. A defaults.plugins list
+// is rejected with [ErrPluginsUnsupported]: external plugins are not supported.
+// Reading and discovering the file is the caller's job.
+func Parse(data []byte) (*File, error) {
 	var cfg File
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
@@ -235,57 +227,9 @@ func Load(path string) (*File, error) {
 		return nil, err
 	}
 	if len(removed.Defaults.Plugins) > 0 {
-		return nil, fmt.Errorf("%s: %w", path, ErrPluginsUnsupported)
+		return nil, ErrPluginsUnsupported
 	}
 	return &cfg, nil
-}
-
-// FindConfigFile searches for .optgen.yaml starting from startDir and walking
-// parent directories up to the project root (identified by go.mod or .git).
-//
-// It returns (configPath, projectRoot). If no config file is found but a
-// project root exists, configPath is empty and projectRoot is set. If
-// neither is found (e.g. filesystem root reached), both are empty.
-func FindConfigFile(startDir string) (configPath, projectRoot string) {
-	dir, err := filepath.Abs(startDir)
-	if err != nil {
-		return "", ""
-	}
-
-	for {
-		// Check for config file in current directory
-		configPath := filepath.Join(dir, ConfigFileName)
-		if _, err := os.Stat(configPath); err == nil {
-			return configPath, dir
-		}
-
-		// Check if this is a project root (has go.mod or .git)
-		if isProjectRoot(dir) {
-			// File not found, but we found project root
-			return "", dir
-		}
-
-		// Move to parent directory
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			// Reached filesystem root
-			return "", ""
-		}
-		dir = parent
-	}
-}
-
-// isProjectRoot checks if the directory is a project root.
-func isProjectRoot(dir string) bool {
-	// Check for go.mod
-	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-		return true
-	}
-	// Check for .git
-	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-		return true
-	}
-	return false
 }
 
 // GetPackageConfig returns [Defaults] for pkgPath by copying the global defaults

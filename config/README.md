@@ -4,15 +4,14 @@
 import "github.com/altessa-s/go-optgen/config"
 ```
 
-Package `config` loads and merges `.optgen.yaml` configuration files for the optgen code generator. `FindConfigFile` walks from a start directory toward
-the filesystem root, stopping at the first `.optgen.yaml` or at a project boundary (`go.mod` / `.git`).
+Package `config` decodes and merges `.optgen.yaml` configuration documents for the optgen code generator. It performs no I/O: the optgen command
+finds the file (the first `.optgen.yaml` between the target directory and the project boundary, `go.mod` / `.git`) and passes its contents to `Parse`.
 
 ## Functions
 
-| Function           | Description                                                                               |
-|--------------------|-------------------------------------------------------------------------------------------|
-| `Load`             | Parse an `.optgen.yaml` file at the given path into a `File`                            |
-| `FindConfigFile`   | Search parent directories for `.optgen.yaml`, return config path and project root          |
+| Function | Description                                                 |
+|----------|-------------------------------------------------------------|
+| `Parse`  | Decode the contents of an `.optgen.yaml` file into a `File` |
 
 ## Key types
 
@@ -54,4 +53,4 @@ the filesystem root, stopping at the first `.optgen.yaml` or at a project bounda
 YAML keys are kebab-case (`option-type`, `all-fields`, `disable-plugins`). `File.GetPackageConfig(pkgPath)` returns the `Defaults` merged with the
 `packages` override for that path.
 
-External plugins are not supported: `Load` rejects a `defaults.plugins` list with `ErrPluginsUnsupported`.
+External plugins are not supported: `Parse` rejects a `defaults.plugins` list with `ErrPluginsUnsupported`.
