@@ -170,7 +170,7 @@ func (w Writer) Write(ctx context.Context, path string, content []byte, formatte
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	if err := os.Chmod(temporary, defaultFilePermission); err != nil {
+	if err := os.Chmod(temporary, defaultFilePermission); err != nil { // #nosec G302 -- Generated Go source is world-readable like any source file.
 		return err
 	}
 	return os.Rename(temporary, path)
