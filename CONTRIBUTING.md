@@ -147,7 +147,7 @@ All `.go` files must include the copyright header. Run `make copyright` to add i
 | `make dupl` | Find code duplication |
 | `make dupl-check` | Fail on code duplication |
 | `make copyright` | Add copyright headers |
-| `make generate` | Build pinned optgen and gci into `bin/` and regenerate options |
+| `make generate` | Build the local optgen and the pinned gci into `bin/` and regenerate options |
 | `make tidy` | Run go mod tidy |
 | `make security-scan` | Run govulncheck and gosec |
 
