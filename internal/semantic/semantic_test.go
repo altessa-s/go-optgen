@@ -5,6 +5,7 @@
 package semantic_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -135,8 +136,9 @@ func TestPrepareAppliesPrefixBeforeValidation(t *testing.T) {
 // fakeCatalog serves fixed descriptors for default modifier policy tests.
 type fakeCatalog struct{ descriptors []plugin.Descriptor }
 
-func (c fakeCatalog) Descriptors() []plugin.Descriptor  { return c.descriptors }
-func (fakeCatalog) FindTypeDefaultPlugin(string) string { return "" }
+func (c fakeCatalog) Descriptors() []plugin.Descriptor    { return c.descriptors }
+func (fakeCatalog) FindTypeDefaultPlugin(string) string   { return "" }
+func (fakeCatalog) NormalizeDefault(_, def string) string { return def }
 func (fakeCatalog) FindCheckPlugin(key string) (plugin.CheckPlugin, plugin.CheckSpec, error) {
 	return nil, plugin.CheckSpec{}, plugin.ErrUnknownCheck
 }
@@ -211,4 +213,43 @@ func TestPrepareWithoutDefaultModifiers(t *testing.T) {
 	require.Equal(t, []string{"upper"}, prepared[0].Modifiers, "explicit modifiers stay, disablers are removed")
 	require.Empty(t, prepared[1].Modifiers)
 	require.Empty(t, prepared[2].Modifiers)
+}
+
+func TestPrepareInputAppliesSettingsPolicies(t *testing.T) {
+	t.Parallel()
+	p := semantic.New(builtinRegistry(t))
+	fields := []model.OptField{{FieldName: "port", OptionName: "Port", Type: "int", Default: "8080"}}
+
+	none, err := p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", DefaultsFrom: model.DefaultsFromNone},
+		Fields: fields})
+	require.NoError(t, err)
+	require.Empty(t, none.Fields[0].Default, "defaults-from=none drops every default")
+	require.Equal(t, "8080", fields[0].Default, "the input is not modified")
+
+	_, err = p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", WithIsSet: true}, Fields: fields})
+	require.ErrorContains(t, err, "optionsFieldSet")
+
+	many := make([]model.OptField, 65)
+	for i := range many {
+		many[i] = model.OptField{FieldName: fmt.Sprintf("f%d", i), OptionName: fmt.Sprintf("F%d", i), Type: "int"}
+	}
+	_, err = p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", WithIsSet: true},
+		IsSetField: "set", Fields: many})
+	require.ErrorContains(t, err, "at most 64")
+
+	ok, err := p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", WithIsSet: true},
+		IsSetField: "set", Fields: many[:64]})
+	require.NoError(t, err)
+	require.Len(t, ok.Fields, 64)
+}
+
+func TestPrepareResolvesMandatoryFromMetadata(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{
+		{FieldName: "addr", OptionName: "Addr", Type: "string", Metadata: map[string]string{"mandatory": "true"}},
+		{FieldName: "port", OptionName: "Port", Type: "int"},
+	})
+	require.NoError(t, err)
+	require.True(t, prepared[0].Mandatory)
+	require.False(t, prepared[1].Mandatory)
 }

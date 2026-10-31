@@ -294,7 +294,6 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			ElemType:     elemType,
 			Modifiers:    slices.Clone(modifiers),
 			Metadata:     maps.Clone(parsed.Metadata),
-			Mandatory:    parsed.Metadata["mandatory"] == "true",
 			Checks:       maps.Clone(parsed.Checks),
 			BareChecks:   maps.Clone(parsed.BareChecks),
 			HasModifiers: len(modifiers) > 0,

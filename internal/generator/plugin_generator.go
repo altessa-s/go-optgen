@@ -18,21 +18,10 @@ import (
 // functions for every field in in.Fields. Each field is dispatched to the
 // highest-priority [plugin.FieldPlugin] that can handle it; if no plugin matches,
 // an error is returned. The output is deterministically ordered by option name.
+//
+// in must be prepared: settings policies such as dropping defaults for
+// [model.DefaultsFromNone] and the WithIsSet limits are applied before rendering.
 func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
-	if in.DefaultsFrom == model.DefaultsFromNone {
-		in.Fields = slices.Clone(in.Fields)
-		for i := range in.Fields {
-			in.Fields[i].Default = ""
-		}
-	}
-	if in.WithIsSet {
-		if in.IsSetField == "" {
-			return nil, fmt.Errorf("with-isset: declare a field of type %sFieldSet in %s", in.TypeName, in.TypeName)
-		}
-		if len(in.Fields) > maxIsSetFields {
-			return nil, fmt.Errorf("with-isset: %s has %d fields, at most %d are supported", in.TypeName, len(in.Fields), maxIsSetFields)
-		}
-	}
 	ctx := plugin.NewGenerationContext(in.PackageName, in.RenderSettings, in.Fields, in.Imports, in.GenericInfo)
 	ctx.IsSetField = in.IsSetField
 
@@ -175,9 +164,6 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 
 	return g.renderPluginTemplate(data)
 }
-
-// maxIsSetFields is the capacity of the uint64 field set.
-const maxIsSetFields = 64
 
 // mandatoryParam is a constructor parameter assigned to a mandatory field.
 type mandatoryParam struct {

@@ -280,24 +280,6 @@ func (s *generateSettings) validateNames() error {
 			return fmt.Errorf("invalid %s: %q cannot start a Go identifier", name.what, name.value)
 		}
 	}
-	switch model.StringSetterMode(s.stringSetter) {
-	case "", model.StringSetterGeneric, model.StringSetterPlain:
-	default:
-		return fmt.Errorf("invalid string setter %q (want %s or %s)", s.stringSetter, model.StringSetterGeneric, model.StringSetterPlain)
-	}
-	switch model.CheckFailureMode(s.checkFailure) {
-	case "", model.CheckFailurePanic, model.CheckFailureSkip:
-	default:
-		return fmt.Errorf("invalid check failure mode %q (want %s or %s)", s.checkFailure, model.CheckFailurePanic, model.CheckFailureSkip)
-	}
-	switch model.SliceSetterMode(s.sliceSetter) {
-	case "", model.SliceSetterVariadic, model.SliceSetterSlice:
-	default:
-		return fmt.Errorf("invalid slice setter %q (want %s or %s)", s.sliceSetter, model.SliceSetterVariadic, model.SliceSetterSlice)
-	}
-	if _, _, err := s.defaults(); err != nil {
-		return err
-	}
 	for _, pattern := range s.exclude {
 		if _, err := path.Match(pattern, ""); err != nil {
 			return fmt.Errorf("invalid --exclude pattern %q: %w", pattern, err)
@@ -319,29 +301,17 @@ func capitalizeFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// defaults parses --defaults-from: tag (default), var[=name], func[=name] or
-// none. Var and func sources default to default<Type>Value and getDefault<Type>.
-func (s *generateSettings) defaults() (model.DefaultsSource, string, error) {
+// defaults splits --defaults-from into its source and name: tag (default),
+// var[=name], func[=name] or none. [model.RenderSettings.Verify] validates them;
+// var and func sources default to default<Type>Value and getDefault<Type>.
+func (s *generateSettings) defaults() (model.DefaultsSource, string) {
 	kind, name, _ := strings.Cut(s.defaultsFrom, "=")
-	switch source := model.DefaultsSource(kind); source {
-	case "", model.DefaultsFromTags, model.DefaultsFromNone:
-		if name != "" {
-			return "", "", fmt.Errorf("invalid defaults source %q: %s takes no name", s.defaultsFrom, kind)
-		}
-		return source, "", nil
-	case model.DefaultsFromVar, model.DefaultsFromFunc:
-		if name != "" && !token.IsIdentifier(name) {
-			return "", "", fmt.Errorf("invalid defaults source %q: %q is not a valid Go identifier", s.defaultsFrom, name)
-		}
-		return source, name, nil
-	default:
-		return "", "", fmt.Errorf("invalid defaults source %q (want tag, var[=name], func[=name] or none)", s.defaultsFrom)
-	}
+	return model.DefaultsSource(kind), name
 }
 
 // request builds the use-case request for t from the resolved settings.
 func (s *generateSettings) request(t target) application.Request {
-	source, name, _ := s.defaults() // validated by validateNames
+	source, name := s.defaults()
 	switch {
 	case source == model.DefaultsFromVar && name == "":
 		name = "default" + capitalizeFirst(t.typeName) + "Value"

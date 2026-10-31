@@ -12,22 +12,19 @@ import (
 	"maps"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/altessa-s/go-optgen/model"
 	"github.com/altessa-s/go-optgen/plugin"
-
-	goparser "go/parser"
 )
 
 // Catalog supplies declaration policies without owning parsing or rendering.
 type Catalog interface {
 	Descriptors() []plugin.Descriptor
 	FindTypeDefaultPlugin(string) string
+	NormalizeDefault(typeStr, def string) string
 	FindCheckPlugin(string) (plugin.CheckPlugin, plugin.CheckSpec, error)
 }
 
@@ -57,6 +54,7 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 			p.warn(fmt.Sprintf("field %s is exported; keep option fields unexported so callers configure through options", f.FieldName))
 		}
 		f.OptionName = p.options.prefix + f.OptionName
+		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
 		if !f.DefaultOnly && f.OptionName != "" && !token.IsIdentifier(f.OptionName) {
 			return nil, fmt.Errorf("field %s: invalid option name %q", f.FieldName, f.OptionName)
 		}
@@ -65,13 +63,41 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		}
 		if f.Default == "" {
 			f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
-		} else if f.Type == "time.Duration" {
-			f.Default = durationDefault(f.Default)
+		} else {
+			f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
 		}
 		f.Modifiers = policy.modifiers(*f)
 		f.HasModifiers = len(f.Modifiers) > 0
 	}
 	return out, nil
+}
+
+// maxIsSetFields is the capacity of the uint64 field set behind WithIsSet.
+const maxIsSetFields = 64
+
+// PrepareInput prepares in's fields with [Preparer.Prepare] and applies the
+// settings' policies: [model.DefaultsFromNone] drops every default, and
+// WithIsSet requires a FieldSet field and at most 64 fields.
+func (p *Preparer) PrepareInput(in model.GenerateInput) (model.GenerateInput, error) {
+	fields, err := p.Prepare(in.Fields)
+	if err != nil {
+		return model.GenerateInput{}, err
+	}
+	if in.DefaultsFrom == model.DefaultsFromNone {
+		for i := range fields {
+			fields[i].Default = ""
+		}
+	}
+	if in.WithIsSet {
+		if in.IsSetField == "" {
+			return model.GenerateInput{}, fmt.Errorf("with-isset: declare a field of type %sFieldSet in %s", in.TypeName, in.TypeName)
+		}
+		if len(fields) > maxIsSetFields {
+			return model.GenerateInput{}, fmt.Errorf("with-isset: %s has %d fields, at most %d are supported", in.TypeName, len(fields), maxIsSetFields)
+		}
+	}
+	in.Fields = fields
+	return in, nil
 }
 
 // prepareChecks validates every optcheck key against its plugin and drops the
@@ -192,26 +218,4 @@ func (p *Preparer) excluded(f model.OptField) bool {
 		matched, err := path.Match(pattern, f.FieldName)
 		return err == nil && matched
 	})
-}
-
-// durationDefault rewrites a duration literal such as "30s" or "1h30m",
-// which is not a Go expression, into one such as 90 * time.Minute. Other
-// defaults are returned unchanged.
-func durationDefault(def string) string {
-	if _, err := goparser.ParseExpr(def); err == nil {
-		return def
-	}
-	d, err := time.ParseDuration(def)
-	if err != nil {
-		return def
-	}
-	for _, unit := range []struct {
-		d    time.Duration
-		name string
-	}{{time.Hour, "Hour"}, {time.Minute, "Minute"}, {time.Second, "Second"}, {time.Millisecond, "Millisecond"}, {time.Microsecond, "Microsecond"}} {
-		if d%unit.d == 0 {
-			return strconv.FormatInt(int64(d/unit.d), 10) + " * time." + unit.name
-		}
-	}
-	return "time.Duration(" + strconv.FormatInt(int64(d), 10) + ")"
 }

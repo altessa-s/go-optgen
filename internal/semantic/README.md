@@ -4,8 +4,9 @@
 import "github.com/altessa-s/go-optgen/internal/semantic"
 ```
 
-Package `semantic` validates declarations and applies explicit plugin policies: the option name prefix, check applicability, type defaults, and the
-default modifiers derived from plugin metadata.
+Package `semantic` validates declarations and applies explicit plugin policies: the option name prefix, check applicability, type defaults and
+default normalization, and the default modifiers derived from plugin metadata. `PrepareInput` also applies the settings policies of a rendering
+request (`defaults-from=none`, `with-isset`).
 
 ## Options
 
@@ -20,7 +21,7 @@ default modifiers derived from plugin metadata.
 
 | API        | Purpose                                                                         |
 |------------|---------------------------------------------------------------------------------|
-| `Catalog`  | Required policy queries: plugin descriptors, type defaults, check plugins       |
+| `Catalog`  | Required policy queries: plugin descriptors, type defaults and their normalization, check plugins |
 | `Preparer` | Implements the application preparation port; returns validated, enriched copies |
 
 ## Usage
