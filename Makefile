@@ -72,8 +72,9 @@ generate: ## Build the local optgen and the pinned gci into bin/ and run go gene
 	@PATH="$(CURDIR)/bin:$(PATH)" go generate ./...
 
 .PHONY: vet
-vet: ## Run go vet on all packages
+vet: ## Run go vet and fail when a go fix modernizer would rewrite code (as CI does)
 	@go vet ./...
+	@go fix -diff ./... || { echo "go fix -diff is not empty: run go fix ./..."; exit 1; }
 
 .PHONY: test
 test: ## Run all tests
