@@ -19,6 +19,7 @@ type options struct {
 	labels    []string          `opt:"Labels" optval:"trimspaces,lower,dedup" optcheck:"maxlen=50"`
 	patterns  []*regexp.Regexp  `opt:"Patterns" optgen:"manual"`
 	ips       []net.IP          `opt:"IPs" optgen:"parseip,err=errInvalidIP,append" optcheck:"maxlen=10"`
+	ports     []int             `opt:"Ports"` // deduplicated straight from the variadic argument
 	logger    *slog.Logger      `opt:"Logger"`
 	headers   map[string]string `opt:"Headers"`
 	maxItems  int               `opt:"MaxItems" optval:"positive"`

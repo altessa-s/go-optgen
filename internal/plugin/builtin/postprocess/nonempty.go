@@ -53,7 +53,9 @@ func (m *NonEmptyModifier) Generate(ctx plugin.GenerationContext, field model.Op
 		}
 	}
 
-	// []string: drop empty entries into a new slice.
+	// []string: drop empty entries into a new slice, which becomes the output.
+	// The input is never reassigned: it is the option's captured argument, and
+	// an Option value may be applied many times, concurrently.
 	if field.IsSlice && field.ElemType == kindString {
 		tmp := "nonEmpty"
 		if strings.EqualFold(inputVar, tmp) {
@@ -66,9 +68,8 @@ func (m *NonEmptyModifier) Generate(ctx plugin.GenerationContext, field model.Op
 			"    " + tmp + " = append(" + tmp + ", x)",
 			"  }",
 			"}",
-			inputVar + " = " + tmp,
 		}
-		return plugin.ModifierResult{Code: code, OutputVar: inputVar}
+		return plugin.ModifierResult{Code: code, OutputVar: tmp}
 	}
 
 	return plugin.ModifierResult{OutputVar: inputVar}

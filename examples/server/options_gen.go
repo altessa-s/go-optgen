@@ -148,20 +148,18 @@ func WithTags(v ...string) Option {
 				nonEmpty = append(nonEmpty, x)
 			}
 		}
-		transformed = nonEmpty
+		deduped := make([]string, 0, len(nonEmpty))
 		{
-			seen := make(map[string]struct{}, len(transformed))
-			deduped := make([]string, 0, len(transformed))
-			for _, item := range transformed {
+			seen := make(map[string]struct{}, len(nonEmpty))
+			for _, item := range nonEmpty {
 				if _, ok := seen[item]; ok {
 					continue
 				}
 				seen[item] = struct{}{}
 				deduped = append(deduped, item)
 			}
-			transformed = deduped
 		}
-		o.tags = append(o.tags, transformed...)
+		o.tags = append(o.tags, deduped...)
 		return nil
 	}
 }
