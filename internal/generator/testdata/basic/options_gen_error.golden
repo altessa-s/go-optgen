@@ -36,9 +36,9 @@ func WithHosts(v ...string) Option {
 		for i, element := range v {
 			transformed[i] = strings.TrimSpace(element)
 		}
+		deduped := make([]string, 0, len(transformed))
 		{
 			seen := make(map[string]struct{}, len(transformed))
-			deduped := make([]string, 0, len(transformed))
 			for _, item := range transformed {
 				if _, ok := seen[item]; ok {
 					continue
@@ -46,9 +46,8 @@ func WithHosts(v ...string) Option {
 				seen[item] = struct{}{}
 				deduped = append(deduped, item)
 			}
-			transformed = deduped
 		}
-		o.hosts = transformed
+		o.hosts = deduped
 		return nil
 	}
 }
@@ -86,9 +85,9 @@ func WithLabels(v ...string) Option {
 		for i, element := range v {
 			transformed[i] = strings.ToLower(strings.TrimSpace(element))
 		}
+		deduped := make([]string, 0, len(transformed))
 		{
 			seen := make(map[string]struct{}, len(transformed))
-			deduped := make([]string, 0, len(transformed))
 			for _, item := range transformed {
 				if _, ok := seen[item]; ok {
 					continue
@@ -96,12 +95,11 @@ func WithLabels(v ...string) Option {
 				seen[item] = struct{}{}
 				deduped = append(deduped, item)
 			}
-			transformed = deduped
 		}
-		if len(transformed) > (50) {
+		if len(deduped) > (50) {
 			return fmt.Errorf("labels has too many elements (max 50)")
 		}
-		o.labels = transformed
+		o.labels = deduped
 		return nil
 	}
 }
@@ -158,6 +156,28 @@ func WithName[T interface{ string | *string }](v T) Option {
 			return nil
 		}
 		o.name = transformedValue
+		return nil
+	}
+}
+
+// WithPorts sets the ports option.
+func WithPorts(v ...int) Option {
+	return func(o *options) error {
+		if len(v) == 0 {
+			return nil
+		}
+		deduped := make([]int, 0, len(v))
+		{
+			seen := make(map[int]struct{}, len(v))
+			for _, item := range v {
+				if _, ok := seen[item]; ok {
+					continue
+				}
+				seen[item] = struct{}{}
+				deduped = append(deduped, item)
+			}
+		}
+		o.ports = deduped
 		return nil
 	}
 }
