@@ -220,24 +220,24 @@ func TestPrepareInputAppliesSettingsPolicies(t *testing.T) {
 	p := semantic.New(builtinRegistry(t))
 	fields := []model.OptField{{FieldName: "port", OptionName: "Port", Type: "int", Default: "8080"}}
 
-	none, err := p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", DefaultsFrom: model.DefaultsFromNone},
+	none, err := p.PrepareInput(model.GenerateInput{TypeName: "options", DefaultsFrom: model.DefaultsFromNone,
 		Fields: fields})
 	require.NoError(t, err)
 	require.Empty(t, none.Fields[0].Default, "defaults-from=none drops every default")
 	require.Equal(t, "8080", fields[0].Default, "the input is not modified")
 
-	_, err = p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", WithIsSet: true}, Fields: fields})
+	_, err = p.PrepareInput(model.GenerateInput{TypeName: "options", WithIsSet: true, Fields: fields})
 	require.ErrorContains(t, err, "optionsFieldSet")
 
 	many := make([]model.OptField, 65)
 	for i := range many {
 		many[i] = model.OptField{FieldName: fmt.Sprintf("f%d", i), OptionName: fmt.Sprintf("F%d", i), Type: "int"}
 	}
-	_, err = p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", WithIsSet: true},
+	_, err = p.PrepareInput(model.GenerateInput{TypeName: "options", WithIsSet: true,
 		IsSetField: "set", Fields: many})
 	require.ErrorContains(t, err, "at most 64")
 
-	ok, err := p.PrepareInput(model.GenerateInput{RenderSettings: model.RenderSettings{TypeName: "options", WithIsSet: true},
+	ok, err := p.PrepareInput(model.GenerateInput{TypeName: "options", WithIsSet: true,
 		IsSetField: "set", Fields: many[:64]})
 	require.NoError(t, err)
 	require.Len(t, ok.Fields, 64)
