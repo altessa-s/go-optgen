@@ -5,6 +5,7 @@
 package plugin
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/altessa-s/go-optgen/model"
@@ -40,4 +41,22 @@ func ValueKindOf(field model.OptField) ValueKind {
 	default:
 		return ValueOther
 	}
+}
+
+// NumericTypes returns the well-known integer, floating-point and duration
+// types that numeric value plugins accept without type information.
+func NumericTypes() []string {
+	return []string{
+		"int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+		"float32", "float64",
+		"time.Duration",
+	}
+}
+
+// IsNumericField reports whether field holds a single integer or
+// floating-point value: one of [NumericTypes], or a named type that the
+// parser resolved as numeric, such as type Port int.
+func IsNumericField(field model.OptField) bool {
+	return !field.IsSlice && (field.IsNumeric || slices.Contains(NumericTypes(), field.Type))
 }

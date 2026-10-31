@@ -445,9 +445,25 @@ func Normalization() {}
 			t.Parallel()
 
 			pkg := parsePackage(t, map[string]string{"options.go": tc.source})
-			require.Equal(t, tc.want, parser.FindNormalizationMethod(pkg, "options"))
+			got, err := parser.FindNormalizationMethod(pkg, "options")
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestFindNormalizationMethod_RejectsGenericMethod(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `
+package sample
+
+type options struct{}
+
+func (o *options) Normalization[T any]() {}
+`})
+	_, err := parser.FindNormalizationMethod(pkg, "options")
+	require.ErrorIs(t, err, parser.ErrGenericNormalization)
 }
 
 func TestTypeToString(t *testing.T) {
@@ -713,14 +729,18 @@ package sample
 type options[T any] struct{}
 func (o *options[T]) Normalization() {}
 `})
-	require.Equal(t, "Normalization", parser.FindNormalizationMethod(pkgSingle, "options"))
+	got, err := parser.FindNormalizationMethod(pkgSingle, "options")
+	require.NoError(t, err)
+	require.Equal(t, "Normalization", got)
 
 	pkgMulti := parsePackage(t, map[string]string{"options.go": `
 package sample
 type options[T any, U comparable] struct{}
 func (o options[T, U]) normalization() {}
 `})
-	require.Equal(t, "normalization", parser.FindNormalizationMethod(pkgMulti, "options"))
+	got, err = parser.FindNormalizationMethod(pkgMulti, "options")
+	require.NoError(t, err)
+	require.Equal(t, "normalization", got)
 }
 
 // TestFindOptFieldsRejectsDeclarationsInSeveralFiles pins that build-constrained

@@ -17,9 +17,9 @@ type Source interface {
 	Parse(context.Context, string, string, bool) ([]model.SourcePackage, error)
 }
 
-// Preparer validates declarations and resolves policies.
+// Preparer validates settings and declarations and resolves policies.
 type Preparer interface {
-	Prepare([]model.OptField) ([]model.OptField, error)
+	PrepareInput(model.GenerateInput) (model.GenerateInput, error)
 }
 
 // Renderer converts prepared declarations to source code.
@@ -68,6 +68,9 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err := req.Settings.Verify(); err != nil {
+		return nil, err
+	}
 	packages, err := s.source.Parse(ctx, req.Directory, req.Settings.TypeName, req.AllFields)
 	if err != nil {
 		return nil, err
@@ -80,23 +83,23 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		fields, err := s.preparer.Prepare(pkg.Fields)
-		if err != nil {
-			return nil, err
-		}
-		content, err := s.renderer.Generate(model.GenerateInput{
+		in, err := s.preparer.PrepareInput(model.GenerateInput{
 			RenderSettings:      req.Settings,
 			PackageName:         pkg.Name,
-			Fields:              fields,
+			Fields:              pkg.Fields,
 			Imports:             pkg.Imports,
 			NormalizationMethod: pkg.NormalizationMethod,
 			IsSetField:          pkg.IsSetField,
 			GenericInfo:         pkg.GenericInfo,
 		})
 		if err != nil {
+			return nil, err
+		}
+		content, err := s.renderer.Generate(in)
+		if err != nil {
 			return nil, fmt.Errorf("failed to generate: %w", err)
 		}
-		artifacts = append(artifacts, Artifact{Path: filepath.Join(req.Directory, req.Output), Content: content, Options: len(fields)})
+		artifacts = append(artifacts, Artifact{Path: filepath.Join(req.Directory, req.Output), Content: content, Options: len(in.Fields)})
 	}
 	if len(artifacts) == 0 {
 		return nil, fmt.Errorf("no struct with name '%s' and opt tags found", req.Settings.TypeName)

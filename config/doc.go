@@ -2,12 +2,13 @@
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
 
-// Package config loads and merges .optgen.yaml configuration files.
+// Package config decodes and merges .optgen.yaml configuration documents.
 //
-// [FindConfigFile] walks from a start directory toward the filesystem root,
-// stopping at the first .optgen.yaml or at a project boundary (go.mod / .git).
-// [Load] parses the YAML into a [File], and [File.GetPackageConfig] merges
+// [Parse] decodes the YAML into a [File], and [File.GetPackageConfig] merges
 // global [Defaults] with any [PackageConfig] overrides keyed by relative path.
+// The package performs no I/O: the optgen command finds the file by walking
+// from the target directory to the first .optgen.yaml or project boundary
+// (go.mod / .git) and passes its contents to [Parse].
 //
 // CLI flags always take precedence over config-file values.
 //

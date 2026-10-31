@@ -4,7 +4,12 @@
 
 package model
 
-import "cmp"
+import (
+	"cmp"
+	"errors"
+	"fmt"
+	"go/token"
+)
 
 // StringSetterMode selects the signature of string option functions.
 type StringSetterMode string
@@ -99,6 +104,44 @@ type RenderSettings struct {
 	// WithIsSet records applied options in the struct field of type
 	// <TypeName>FieldSet and generates an isSet method.
 	WithIsSet bool
+}
+
+// ErrInvalidSettings reports a [RenderSettings] value outside its documented set.
+var ErrInvalidSettings = errors.New("invalid render settings")
+
+// Verify reports whether every mode of s is a documented value and whether
+// a var or func defaults source names a valid identifier. Errors wrap
+// [ErrInvalidSettings].
+func (s RenderSettings) Verify() error {
+	switch s.StringSetter {
+	case "", StringSetterGeneric, StringSetterPlain:
+	default:
+		return fmt.Errorf("%w: string setter %q (want %s or %s)", ErrInvalidSettings, s.StringSetter, StringSetterGeneric, StringSetterPlain)
+	}
+	switch s.CheckFailure {
+	case "", CheckFailurePanic, CheckFailureSkip:
+	default:
+		return fmt.Errorf("%w: check failure mode %q (want %s or %s)", ErrInvalidSettings, s.CheckFailure, CheckFailurePanic, CheckFailureSkip)
+	}
+	switch s.SliceSetter {
+	case "", SliceSetterVariadic, SliceSetterSlice:
+	default:
+		return fmt.Errorf("%w: slice setter %q (want %s or %s)", ErrInvalidSettings, s.SliceSetter, SliceSetterVariadic, SliceSetterSlice)
+	}
+	switch s.DefaultsFrom {
+	case "", DefaultsFromTags, DefaultsFromNone:
+		if s.DefaultsName != "" {
+			return fmt.Errorf("%w: defaults source %s takes no name", ErrInvalidSettings, cmp.Or(s.DefaultsFrom, DefaultsFromTags))
+		}
+	case DefaultsFromVar, DefaultsFromFunc:
+		if s.DefaultsName != "" && !token.IsIdentifier(s.DefaultsName) {
+			return fmt.Errorf("%w: defaults name %q is not a valid Go identifier", ErrInvalidSettings, s.DefaultsName)
+		}
+	default:
+		return fmt.Errorf("%w: defaults source %q (want %s, %s, %s or %s)", ErrInvalidSettings, s.DefaultsFrom,
+			DefaultsFromTags, DefaultsFromVar, DefaultsFromFunc, DefaultsFromNone)
+	}
+	return nil
 }
 
 // OptionFuncPrefix returns FuncPrefix or [DefaultFuncPrefix].

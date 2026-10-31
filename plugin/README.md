@@ -15,6 +15,7 @@ generator can implement extensions with stable interfaces; the `optgen` CLI regi
 | `TransformPlugin`  | Applies a single `optval` modifier (e.g. `lower`, `trimspaces`) to an expression         |
 | `ModifierPlugin`   | Pipeline modifier selected by `optgen`/`optval` keys (guards, post-processing)           |
 | `TypeDefaultPlugin`| Supplies a default-value expression for a field type when none is specified               |
+| `DefaultNormalizer`| Optional `TypeDefaultPlugin` extension: rewrites an explicit tag default into Go code      |
 | `CheckPlugin`      | Generates validation code for an `optcheck` key (e.g. `required`, `minlen`)              |
 | `PluginMeta`       | Provides `Meta() Meta`; embedded by every plugin contract                                 |
 

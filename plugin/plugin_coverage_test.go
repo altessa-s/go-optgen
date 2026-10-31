@@ -790,3 +790,13 @@ func TestRegistryWarningSinkMayReenter(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []string{"Restricted"}, names)
 }
+
+func TestIsNumericField(t *testing.T) {
+	t.Parallel()
+	for _, typ := range plugin.NumericTypes() {
+		require.True(t, plugin.IsNumericField(model.OptField{Type: typ}), typ)
+	}
+	require.True(t, plugin.IsNumericField(model.OptField{Type: "Port", IsNumeric: true}), "resolved named numeric type")
+	require.False(t, plugin.IsNumericField(model.OptField{Type: "[]int", IsSlice: true}))
+	require.False(t, plugin.IsNumericField(model.OptField{Type: "string"}))
+}

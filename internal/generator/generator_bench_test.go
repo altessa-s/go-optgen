@@ -20,16 +20,14 @@ func BenchmarkGenerate(b *testing.B) {
 	}
 	g := generator.New(r, plugin.NewPipeline(r))
 	in := model.GenerateInput{
-		PackageName: "sample",
-		RenderSettings: model.RenderSettings{
-			TypeName:            "options",
-			OptionType:          "Option",
-			GenerateOptionType:  true,
-			GenerateDefaultFunc: true,
-			GenerateNewFunc:     true,
-			DefaultFuncName:     "defaultOptions",
-			NewFuncName:         "newOptions",
-		},
+		PackageName:         "sample",
+		TypeName:            "options",
+		OptionType:          "Option",
+		GenerateOptionType:  true,
+		GenerateDefaultFunc: true,
+		GenerateNewFunc:     true,
+		DefaultFuncName:     "defaultOptions",
+		NewFuncName:         "newOptions",
 		Fields: []model.OptField{
 			{FieldName: "name", OptionName: "Name", Type: "string", Modifiers: []string{"trimspaces"}, HasModifiers: true},
 			{FieldName: "retries", OptionName: "Retries", Type: "int", Default: "3"},

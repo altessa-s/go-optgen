@@ -69,8 +69,12 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 		if err != nil {
 			return nil, err
 		}
+		normalization, err := optparser.FindNormalizationMethod(pkg.ast, typeName)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, model.SourcePackage{Name: pkg.ast.Name, Fields: result.Fields, Imports: result.Imports, GenericInfo: result.GenericInfo,
-			NormalizationMethod: optparser.FindNormalizationMethod(pkg.ast, typeName), IsSetField: result.IsSetField})
+			NormalizationMethod: normalization, IsSetField: result.IsSetField})
 	}
 	return out, nil
 }

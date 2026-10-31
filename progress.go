@@ -51,13 +51,13 @@ type reportingPreparer struct {
 	funcPrefix string
 }
 
-func (r reportingPreparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
-	prepared, err := r.preparer.Prepare(fields)
+func (r reportingPreparer) PrepareInput(in model.GenerateInput) (model.GenerateInput, error) {
+	prepared, err := r.preparer.PrepareInput(in)
 	if err != nil || !r.verbose {
 		return prepared, err
 	}
-	_, _ = fmt.Fprintf(r.out, "Found %d field(s) with opt tags:\n", len(prepared))
-	for _, field := range prepared {
+	_, _ = fmt.Fprintf(r.out, "Found %d field(s) with opt tags:\n", len(prepared.Fields))
+	for _, field := range prepared.Fields {
 		_, _ = fmt.Fprintf(r.out, "  - %s (%s) -> %s%s\n", field.FieldName, field.Type, r.funcPrefix, field.OptionName)
 	}
 	_, _ = fmt.Fprintln(r.out, "Generating code...")

@@ -23,7 +23,11 @@ func (f sourceFunc) Parse(c context.Context, d, n string, a bool) ([]model.Sourc
 
 type prepareFunc func([]model.OptField) ([]model.OptField, error)
 
-func (f prepareFunc) Prepare(fields []model.OptField) ([]model.OptField, error) { return f(fields) }
+func (f prepareFunc) PrepareInput(in model.GenerateInput) (model.GenerateInput, error) {
+	fields, err := f(in.Fields)
+	in.Fields = fields
+	return in, err
+}
 
 type renderFunc func(model.GenerateInput) ([]byte, error)
 

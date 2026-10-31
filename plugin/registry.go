@@ -411,6 +411,25 @@ func (r *Registry) FindTypeDefaultPlugin(typeStr string) string {
 	return ""
 }
 
+// NormalizeDefault rewrites the explicit default def of typeStr with the first
+// enabled type-default plugin that implements [DefaultNormalizer] and accepts
+// it, in descending priority order. Otherwise def is returned unchanged.
+func (r *Registry) NormalizeDefault(typeStr, def string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, p := range r.typeDefaultPlugins {
+		n, ok := p.(DefaultNormalizer)
+		if !ok || r.isPluginDisabledLocked(p) {
+			continue
+		}
+		if out, ok := n.NormalizeDefault(typeStr, def); ok {
+			return out
+		}
+	}
+	return def
+}
+
 // Descriptors returns snapshots of all registered plugins ordered by kind
 // (field, type default, transform, modifier, optcheck), then phase, priority
 // in evaluation order (descending, ascending for checks), name and key.

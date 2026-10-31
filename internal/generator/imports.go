@@ -156,8 +156,8 @@ func indexImportsByName(localImports map[string]model.ImportInfo) map[string]mod
 		importByName[key] = imp
 		// Also index by package name (last path segment) if different from key
 		pathName := imp.Path
-		if idx := strings.LastIndex(imp.Path, "/"); idx >= 0 {
-			pathName = imp.Path[idx+1:]
+		if _, after, ok := strings.CutLast(imp.Path, "/"); ok {
+			pathName = after
 		}
 		if pathName != key {
 			if _, exists := importByName[pathName]; !exists {

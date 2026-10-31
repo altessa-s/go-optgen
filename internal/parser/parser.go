@@ -5,6 +5,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"maps"
@@ -293,7 +294,6 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			ElemType:     elemType,
 			Modifiers:    slices.Clone(modifiers),
 			Metadata:     maps.Clone(parsed.Metadata),
-			Mandatory:    parsed.Metadata["mandatory"] == "true",
 			Checks:       maps.Clone(parsed.Checks),
 			BareChecks:   maps.Clone(parsed.BareChecks),
 			HasModifiers: len(modifiers) > 0,
@@ -328,11 +328,16 @@ func sortOptFields(fields []model.OptField) {
 	})
 }
 
+// ErrGenericNormalization reports a normalization method that declares its own
+// type parameters: the generated call o.Normalization() cannot infer them.
+var ErrGenericNormalization = errors.New("normalization method must not declare type parameters")
+
 // FindNormalizationMethod searches for a Normalization or normalization method
 // on the specified struct type. Returns the method name if found, or empty string otherwise.
+// It returns [ErrGenericNormalization] when the method declares type parameters.
 //
 //nolint:staticcheck // SA1019: ast.Package is deprecated; optgen intentionally operates on go/ast packages.
-func FindNormalizationMethod(pkg *ast.Package, typeName string) string {
+func FindNormalizationMethod(pkg *ast.Package, typeName string) (string, error) {
 	for _, name := range slices.Sorted(maps.Keys(pkg.Files)) {
 		file := pkg.Files[name]
 		for _, decl := range file.Decls {
@@ -348,11 +353,14 @@ func FindNormalizationMethod(pkg *ast.Package, typeName string) string {
 			// Check for Normalization or normalization method
 			methodName := funcDecl.Name.Name
 			if methodName == "Normalization" || methodName == "normalization" {
-				return methodName
+				if funcDecl.Type.TypeParams != nil {
+					return "", fmt.Errorf("%s.%s: %w", typeName, methodName, ErrGenericNormalization)
+				}
+				return methodName, nil
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func receiverTypeName(expr ast.Expr) string {
