@@ -12,7 +12,7 @@ Package `fieldtmpl` provides templates and option data shared by the built-in [f
 |------------|--------------------------------------------------------------------|
 | `Must`     | Parses a field template with the shared `optionReturn` definition  |
 | `Execute`  | Renders one option function                                        |
-| `BaseData` | Field and option type identity                                     |
+| `BaseData` | Field and option type identity, field doc as `DocComment`          |
 | `Data`     | `BaseData` plus pipeline code, final value, and termination flag   |
 | `NewData`  | Runs the value pipeline for a field and builds `Data`              |
 

@@ -47,7 +47,7 @@ func (p *DefaultSetterPlugin) Meta() plugin.Meta {
 	}
 }
 
-var setterTemplate = fieldtmpl.Must("setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.
+var setterTemplate = fieldtmpl.Must("setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}{{if .SkipEmpty}}		if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
@@ -56,7 +56,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionTyp
 	}
 }`)
 
-var stringSetterTemplate = fieldtmpl.Must("string_setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.
+var stringSetterTemplate = fieldtmpl.Must("string_setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
 func {{.FuncPrefix}}{{.OptionName}}[T interface{string|*string}](v T) {{.OptionType}} {
  return func(o *{{.TypeName}}){{if .OptionReturnsError}} error{{end}} {
  var value string

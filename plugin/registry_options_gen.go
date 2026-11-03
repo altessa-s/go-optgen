@@ -7,6 +7,9 @@ package plugin
 type RegistryOption func(o *registryOptions)
 
 // WithWarningSink sets the warningSink option.
+//
+// warningSink receives lookup diagnostics, such as a plugin ignored for an
+// inapplicable type. It is called without registry locks held.
 func WithWarningSink(v func(message string)) RegistryOption {
 	return func(o *registryOptions) {
 		o.warningSink = v

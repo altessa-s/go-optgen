@@ -11,6 +11,9 @@ import (
 type Option func(o *options)
 
 // WithAllowedFormatters sets the allowedFormatters option.
+//
+// allowedFormatters extends the built-in formatter allowlist with command
+// names resolved from PATH. Paths are rejected like any formatter path.
 func WithAllowedFormatters(v ...string) Option {
 	return func(o *options) {
 		if len(v) == 0 {

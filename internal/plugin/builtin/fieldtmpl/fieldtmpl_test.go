@@ -95,3 +95,27 @@ func TestNewDataIndentsPipelineCode(t *testing.T) {
 
 	require.Empty(t, fieldtmpl.NewData(ctx, field, stubPipeline{ValueVar: "v"}, "v").PipelineCode)
 }
+
+func TestNewBaseDataDocComment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		doc  string
+		want string
+	}{
+		{"empty", "", ""},
+		{"single line", "name is the human-readable name.", "\n//\n// name is the human-readable name."},
+		{"paragraphs", "first line\nsecond line\n\nnext paragraph", "\n//\n// first line\n// second line\n//\n// next paragraph"},
+		{"code block", "example:\n\n\tWithName(\"x\")", "\n//\n// example:\n//\n//\tWithName(\"x\")"},
+	}
+
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			data := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "name", Doc: tt.doc})
+			require.Equal(t, tt.want, data.DocComment)
+		})
+	}
+}

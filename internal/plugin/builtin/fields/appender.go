@@ -29,7 +29,7 @@ func (p *DefaultAppenderPlugin) Meta() plugin.Meta {
 	}
 }
 
-var appenderTemplate = fieldtmpl.Must("appender", `// {{.FuncPrefix}}{{.OptionName}} appends to the {{.FieldName}} option.
+var appenderTemplate = fieldtmpl.Must("appender", `// {{.FuncPrefix}}{{.OptionName}} appends to the {{.FieldName}} option.{{.DocComment}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = append(o.{{.FieldName}}, {{.ValueExpr}}...)

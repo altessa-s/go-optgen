@@ -45,7 +45,7 @@ func (p *NetIPParsePlugin) CanHandle(field model.OptField) bool {
 }
 
 var netIPParseTemplate = fieldtmpl.Must("net-ip-parse",
-	`// {{.FuncPrefix}}{{.OptionName}} {{if .Append}}appends to{{else}}sets{{end}} the {{.FieldName}} option.
+	`// {{.FuncPrefix}}{{.OptionName}} {{if .Append}}appends to{{else}}sets{{end}} the {{.FieldName}} option.{{.DocComment}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v ...string) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		netIPs := make([]net.IP, 0, len(v))

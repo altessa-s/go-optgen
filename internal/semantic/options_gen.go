@@ -11,6 +11,9 @@ import (
 type Option func(o *options)
 
 // WithDefaultModifiers sets the defaultModifiers option.
+//
+// defaultModifiers applies the modifiers plugins declare for a type, such
+// as trimspaces for strings. Disabler keys are removed either way.
 func WithDefaultModifiers(v bool) Option {
 	return func(o *options) {
 		o.defaultModifiers = v
@@ -18,6 +21,8 @@ func WithDefaultModifiers(v bool) Option {
 }
 
 // WithExclude sets the exclude option.
+//
+// exclude drops fields whose name matches one of these path.Match patterns.
 func WithExclude(v ...string) Option {
 	return func(o *options) {
 		if len(v) == 0 {
@@ -32,6 +37,8 @@ func WithExclude(v ...string) Option {
 }
 
 // WithPrefix sets the prefix option.
+//
+// prefix is prepended to every option name before validation.
 func WithPrefix[T interface{ string | *string }](v T) Option {
 	return func(o *options) {
 		var value string
@@ -53,6 +60,9 @@ func WithPrefix[T interface{ string | *string }](v T) Option {
 }
 
 // WithWarningSink sets the warningSink option.
+//
+// warningSink receives diagnostics, such as a check skipped because its
+// plugin is disabled.
 func WithWarningSink(v func(message string)) Option {
 	return func(o *options) {
 		o.warningSink = v

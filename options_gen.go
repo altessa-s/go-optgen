@@ -11,6 +11,9 @@ import (
 type Option func(o *options)
 
 // WithPlugins sets the plugins option.
+//
+// plugins register additional plugins into the registry of every command
+// execution, after the built-in plugins and before --disable-plugins.
 func WithPlugins(v ...func(*plugin.Registry) error) Option {
 	return func(o *options) {
 		if len(v) == 0 {
