@@ -11,6 +11,9 @@ import (
 type TransformOption func(o *transformOptions)
 
 // WithLetterCase sets the letterCase option.
+//
+// letterCase starts at "lower" from defaultTransformOptionsValue; the
+// default= tag of prefix applies on top of that variable.
 func WithLetterCase[T interface{ string | *string }](v T) TransformOption {
 	return func(o *transformOptions) {
 		var value string
@@ -38,6 +41,9 @@ func WithLetterCase[T interface{ string | *string }](v T) TransformOption {
 }
 
 // WithPrefix sets the prefix option.
+//
+// prefix keeps its surrounding spaces: notrim disables the default
+// trimspaces modifier.
 func WithPrefix[T interface{ string | *string }](v T) TransformOption {
 	return func(o *transformOptions) {
 		var value string

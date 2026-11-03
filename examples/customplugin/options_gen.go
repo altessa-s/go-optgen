@@ -13,6 +13,9 @@ import (
 type Option func(o *options) error
 
 // WithEndpoint sets the endpoint option.
+//
+// endpoint must be a host:port pair; --validate also rejects a client
+// created without one.
 func WithEndpoint[T interface{ string | *string }](v T) Option {
 	return func(o *options) error {
 		var value string
@@ -42,6 +45,8 @@ func WithEndpoint[T interface{ string | *string }](v T) Option {
 }
 
 // WithUserAgent sets the userAgent option.
+//
+// userAgent has its inner white space collapsed.
 func WithUserAgent[T interface{ string | *string }](v T) Option {
 	return func(o *options) error {
 		var value string

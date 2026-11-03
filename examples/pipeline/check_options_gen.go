@@ -12,6 +12,8 @@ import (
 type CheckOption func(o *checkOptions)
 
 // WithForbidden sets the forbidden option.
+//
+// forbidden words are compared in lower case.
 func WithForbidden(v []string) CheckOption {
 	return func(o *checkOptions) {
 		if len(v) == 0 {
@@ -37,6 +39,9 @@ func WithForbidden(v []string) CheckOption {
 }
 
 // WithMaxLen sets the maxLen option.
+//
+// maxLen starts at the value of defaultCheckOptionsValue; a zero
+// argument fails nonzero and is skipped.
 func WithMaxLen(v int) CheckOption {
 	return func(o *checkOptions) {
 		if v == 0 {
@@ -47,6 +52,8 @@ func WithMaxLen(v int) CheckOption {
 }
 
 // WithTimeout sets the timeout option.
+//
+// timeout gets 30s from the type-defaults of .optgen.yaml.
 func WithTimeout(v time.Duration) CheckOption {
 	return func(o *checkOptions) {
 		if v <= 0 {

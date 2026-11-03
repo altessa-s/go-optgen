@@ -50,6 +50,7 @@ type BaseData struct {
 	KeepEmptyStrings   bool   // Assign empty strings instead of skipping them
 	SliceParam         bool   // Slice options take a slice instead of variadic elements
 	MarkSet            string // Statement recording the applied option, or empty
+	DocComment         string // Field documentation as comment lines following the summary, or empty
 }
 
 // NewBaseData collects the template data for field from ctx.
@@ -65,7 +66,31 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 		KeepEmptyStrings:   ctx.KeepEmptyStrings,
 		SliceParam:         ctx.SliceSetter == model.SliceSetterSlice,
 		MarkSet:            markSet(ctx, field),
+		DocComment:         docComment(field.Doc),
 	}
+}
+
+// docComment renders doc as a separate paragraph of the option function's
+// doc comment: an empty comment line followed by one comment line per line
+// of doc. It returns "" when doc is empty.
+func docComment(doc string) string {
+	if doc == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n//")
+	for line := range strings.Lines(doc) {
+		line = strings.TrimRight(line, " \t\r\n")
+		b.WriteString("\n//")
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "\t") {
+			b.WriteByte(' ')
+		}
+		b.WriteString(line)
+	}
+	return b.String()
 }
 
 // Data adds the value pipeline output to [BaseData]: the indented pipeline

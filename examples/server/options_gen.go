@@ -15,6 +15,8 @@ import (
 type Option func(o *options) error
 
 // WithDebug sets the debug option.
+//
+// debug takes its value as a parameter: WithDebug(true).
 func WithDebug(v bool) Option {
 	return func(o *options) error {
 		o.debug = v
@@ -23,6 +25,8 @@ func WithDebug(v bool) Option {
 }
 
 // WithHeaders sets the headers option.
+//
+// headers start as an empty map, so callers can add to them safely.
 func WithHeaders(v map[string]string) Option {
 	return func(o *options) error {
 		o.headers = v
@@ -31,6 +35,9 @@ func WithHeaders(v map[string]string) Option {
 }
 
 // WithoutKeepAlive disables the disableKeepAlive option.
+//
+// disableKeepAlive is a negative flag: optval:"invert" names its option
+// WithoutKeepAlive, which sets the field to true.
 func WithoutKeepAlive() Option {
 	return func(o *options) error {
 		value := true
@@ -40,6 +47,8 @@ func WithoutKeepAlive() Option {
 }
 
 // WithLogger sets the logger option.
+//
+// logger defaults to a discarding logger; a nil logger is ignored.
 func WithLogger(v *slog.Logger) Option {
 	return func(o *options) error {
 		if v == nil {
@@ -51,6 +60,8 @@ func WithLogger(v *slog.Logger) Option {
 }
 
 // WithMaxConns sets the maxConns option.
+//
+// maxConns is rejected when zero.
 func WithMaxConns(v int) Option {
 	return func(o *options) error {
 		if v == 0 {
@@ -62,6 +73,8 @@ func WithMaxConns(v int) Option {
 }
 
 // WithMode sets the mode option.
+//
+// mode accepts one value of a closed set.
 func WithMode[T interface{ string | *string }](v T) Option {
 	return func(o *options) error {
 		var value string
@@ -90,6 +103,9 @@ func WithMode[T interface{ string | *string }](v T) Option {
 }
 
 // WithName sets the name option.
+//
+// name is trimmed and lower-cased before the checks run; the constructor
+// rejects a missing name because of --validate.
 func WithName[T interface{ string | *string }](v T) Option {
 	return func(o *options) error {
 		var value string
@@ -122,6 +138,8 @@ func WithName[T interface{ string | *string }](v T) Option {
 }
 
 // WithReadTimeout sets the readTimeout option.
+//
+// readTimeout must stay positive; a nonpositive value is ignored.
 func WithReadTimeout(v time.Duration) Option {
 	return func(o *options) error {
 		if v <= 0 {
@@ -133,6 +151,8 @@ func WithReadTimeout(v time.Duration) Option {
 }
 
 // WithTags appends to the tags option.
+//
+// tags accumulate across calls; each call drops empty and duplicate entries.
 func WithTags(v ...string) Option {
 	return func(o *options) error {
 		if len(v) == 0 {
@@ -165,6 +185,9 @@ func WithTags(v ...string) Option {
 }
 
 // WithTrustedProxies sets the trustedProxies option.
+//
+// trustedProxies are parsed from strings; a bad address fails the option
+// with ErrInvalidIP.
 func WithTrustedProxies(v ...string) Option {
 	return func(o *options) error {
 		netIPs := make([]net.IP, 0, len(v))
