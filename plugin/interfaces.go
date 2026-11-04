@@ -17,10 +17,12 @@ func GetPluginName(p PluginMeta) string {
 	if name := p.Meta().Name; name != "" {
 		return name
 	}
+
 	t := reflect.TypeOf(p)
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+
 	return t.Name()
 }
 

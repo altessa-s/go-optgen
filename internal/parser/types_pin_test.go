@@ -15,6 +15,7 @@ import (
 
 func TestExtractImportsFromType_StdLibPin(t *testing.T) {
 	t.Parallel()
+
 	for _, expr := range []string{"context.Context", "*context.Context", "[]context.Context", "[]*context.Context"} {
 		t.Run(expr, func(t *testing.T) {
 			t.Parallel()

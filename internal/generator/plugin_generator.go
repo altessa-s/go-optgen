@@ -30,19 +30,26 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		optionName string
 		code       string
 	}
+
 	functionsOut := make([]funcOut, 0, len(in.Fields))
 	importMap := make(map[string]model.GeneratedImport)
-	var typeDefs []string
-	var helpers []string
+
+	var (
+		typeDefs []string
+		helpers  []string
+	)
+
 	needsTypeImports := make(map[string]bool, len(in.Fields))
 
 	addImport := func(imp model.GeneratedImport) {
 		if imp.Path == "" {
 			return
 		}
+
 		if existing, ok := importMap[imp.Path]; ok && existing.Alias != "" && imp.Alias == "" {
 			return
 		}
+
 		importMap[imp.Path] = imp
 	}
 
@@ -81,6 +88,7 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 			fieldsForImports[i].Default = ""
 		}
 	}
+
 	requiredImports := sourceImports(fieldsForImports, in.Imports, needsTypeImports)
 	for _, imp := range requiredImports {
 		addImport(imp)
@@ -90,23 +98,29 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	for _, imp := range importMap {
 		finalImports = append(finalImports, imp)
 	}
+
 	slices.SortFunc(finalImports, func(a, b model.GeneratedImport) int {
 		if c := cmp.Compare(a.Path, b.Path); c != 0 {
 			return c
 		}
+
 		return cmp.Compare(a.Alias, b.Alias)
 	})
 
 	slices.Sort(typeDefs)
 	typeDefs = slices.Compact(typeDefs)
+
 	slices.Sort(helpers)
 	helpers = slices.Compact(helpers)
+
 	slices.SortFunc(functionsOut, func(a, b funcOut) int {
 		if c := cmp.Compare(a.optionName, b.optionName); c != 0 {
 			return c
 		}
+
 		return cmp.Compare(a.fieldName, b.fieldName)
 	})
+
 	generatedFunctions := make([]string, 0, len(functionsOut))
 	for _, fn := range functionsOut {
 		generatedFunctions = append(generatedFunctions, fn.code)
@@ -174,16 +188,20 @@ type mandatoryParam struct {
 // names avoid the identifiers used by the generated constructor.
 func mandatoryParams(fields []model.OptField) []mandatoryParam {
 	var out []mandatoryParam
+
 	for _, f := range fields {
 		if !f.Mandatory {
 			continue
 		}
+
 		param := f.FieldName
 		if slices.Contains([]string{"o", "opt", "opts", "err"}, param) {
 			param += "Value"
 		}
+
 		out = append(out, mandatoryParam{Field: f.FieldName, Param: param, Type: f.Type})
 	}
+
 	return out
 }
 
@@ -212,15 +230,19 @@ func (g *Generator) validationCode(ctx plugin.GenerationContext, in model.Genera
 	if !in.Validate {
 		return ""
 	}
+
 	checkCtx := ctx
 	checkCtx.OptionReturnsError = true
+
 	var lines []string
 	for _, f := range in.Fields {
 		lines = append(lines, g.pipeline.BuildChecks(checkCtx, f, "o."+f.FieldName)...)
 	}
+
 	if len(lines) == 0 {
 		return ""
 	}
+
 	return "\t" + strings.Join(lines, "\n\t") + "\n"
 }
 
@@ -234,9 +256,11 @@ func newIsSetData(ctx plugin.GenerationContext, in model.GenerateInput) *isSetDa
 	if !in.WithIsSet {
 		return nil
 	}
+
 	d := &isSetData{FieldType: in.TypeName + "Field", SetType: in.TypeName + "FieldSet", Field: in.IsSetField}
 	for _, f := range in.Fields {
 		d.Consts = append(d.Consts, ctx.IsSetConst(f))
 	}
+
 	return d
 }

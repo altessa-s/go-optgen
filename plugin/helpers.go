@@ -29,11 +29,14 @@ func BuildNilEarlyReturn(ctx GenerationContext, valueVar string) []string {
 // function. It imports reflect and compiles for any type.
 func BuildNilCheck(ctx GenerationContext, valueVar string, body ...string) []string {
 	ctx.AddImport("reflect")
+
 	lines := make([]string, 0, 2*len(body)+6)
+
 	lines = append(lines, "switch rv := reflect.ValueOf("+valueVar+"); rv.Kind() {", "case reflect.Invalid:")
 	for _, line := range body {
 		lines = append(lines, "  "+line)
 	}
+
 	lines = append(lines,
 		"case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:",
 		"  if rv.IsNil() {",
@@ -41,6 +44,7 @@ func BuildNilCheck(ctx GenerationContext, valueVar string, body ...string) []str
 	for _, line := range body {
 		lines = append(lines, "    "+line)
 	}
+
 	return append(lines, "  }", "}")
 }
 
@@ -48,5 +52,6 @@ func earlyReturn(ctx GenerationContext) string {
 	if ctx.OptionReturnsError {
 		return "return nil"
 	}
+
 	return "return"
 }

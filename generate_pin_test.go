@@ -22,11 +22,14 @@ import (
 // execGeneratePin runs the generate command with args and returns its error.
 func execGeneratePin(tb testing.TB, args ...string) error {
 	tb.Helper()
+
 	cmd := optgen.NewGenerate()
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs(args)
+
 	return cmd.ExecuteContext(tb.Context())
 }
 
@@ -36,9 +39,11 @@ func sampleDir(tb testing.TB, config string) string {
 	tb.Helper()
 	dir := tb.TempDir()
 	require.NoError(tb, os.WriteFile(filepath.Join(dir, "options.go"), []byte(sampleSource), 0o600))
+
 	if config != "" {
 		require.NoError(tb, os.WriteFile(filepath.Join(dir, ".optgen.yaml"), []byte(config), 0o600))
 	}
+
 	return dir
 }
 
@@ -52,6 +57,7 @@ func TestGenerate_PreRunValidationPin(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
 	base := []string{"--no-config", "--no-format", "--dry-run"}
+
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -79,12 +85,15 @@ func TestGenerate_PreRunValidationPin(t *testing.T) {
 
 func TestGenerate_PreRunPluginsPin(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 	require.NoError(t, builtin.Register(r))
+
 	var known []string
 	for _, d := range r.Descriptors() {
 		known = append(known, d.Name)
 	}
+
 	require.NotEmpty(t, known)
 
 	t.Run("known plugins are disabled, blanks ignored", func(t *testing.T) {

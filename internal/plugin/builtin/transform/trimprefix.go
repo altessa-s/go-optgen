@@ -21,6 +21,7 @@ type TrimPrefixTransformPlugin struct {
 func (t *TrimPrefixTransformPlugin) Apply(ctx plugin.GenerationContext, field model.OptField, _ string, expr string) (string, bool) {
 	// Find the prefix parameter from field.Modifiers
 	prefix := ""
+
 	const keyPrefix = "trimprefix="
 	for _, mod := range field.Modifiers {
 		if len(mod) > len(keyPrefix) && strings.EqualFold(mod[:len(keyPrefix)], keyPrefix) {
@@ -28,11 +29,13 @@ func (t *TrimPrefixTransformPlugin) Apply(ctx plugin.GenerationContext, field mo
 			break
 		}
 	}
+
 	if prefix == "" {
 		return expr, false
 	}
 
 	ctx.AddImport("strings")
+
 	return "strings.TrimPrefix(" + expr + ", " + quote(prefix) + ")", true
 }
 
@@ -44,6 +47,7 @@ func quote(s string) string {
 // escapeString escapes special characters in a string for Go string literal.
 func escapeString(s string) string {
 	var b strings.Builder
+
 	for _, r := range s {
 		switch r {
 		case '\\':
@@ -60,5 +64,6 @@ func escapeString(s string) string {
 			b.WriteRune(r)
 		}
 	}
+
 	return b.String()
 }

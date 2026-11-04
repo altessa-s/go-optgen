@@ -226,9 +226,11 @@ func Parse(data []byte) (*File, error) {
 	if err := yaml.Unmarshal(data, &removed); err != nil {
 		return nil, err
 	}
+
 	if len(removed.Defaults.Plugins) > 0 {
 		return nil, ErrPluginsUnsupported
 	}
+
 	return &cfg, nil
 }
 
@@ -254,59 +256,77 @@ func mergePackageConfig(defaults *Defaults, pkg PackageConfig) {
 	if pkg.Type != "" {
 		defaults.Type = pkg.Type
 	}
+
 	if pkg.Output != "" {
 		defaults.Output = pkg.Output
 	}
+
 	if pkg.OptionType != "" {
 		defaults.OptionType = pkg.OptionType
 	}
+
 	if pkg.OptionError != nil {
 		defaults.OptionError = *pkg.OptionError
 	}
+
 	if pkg.AllFields != nil {
 		defaults.AllFields = *pkg.AllFields
 	}
+
 	if pkg.SkipOptionType != nil {
 		defaults.SkipOptionType = *pkg.SkipOptionType
 	}
+
 	if pkg.SkipDefaultFunc != nil {
 		defaults.SkipDefaultFunc = *pkg.SkipDefaultFunc
 	}
+
 	if pkg.SkipNewFunc != nil {
 		defaults.SkipNewFunc = *pkg.SkipNewFunc
 	}
+
 	if pkg.DefaultFuncName != "" {
 		defaults.DefaultFuncName = pkg.DefaultFuncName
 	}
+
 	if pkg.NewFuncName != "" {
 		defaults.NewFuncName = pkg.NewFuncName
 	}
+
 	if pkg.OptionPrefix != "" {
 		defaults.OptionPrefix = pkg.OptionPrefix
 	}
+
 	if len(pkg.DisablePlugins) > 0 {
 		defaults.DisablePlugins = pkg.DisablePlugins
 	}
+
 	if pkg.Formatter != nil {
 		defaults.Formatter = pkg.Formatter
 	}
+
 	if pkg.NoFormat != nil {
 		defaults.NoFormat = *pkg.NoFormat
 	}
+
 	if pkg.KeepEmptyStrings != nil {
 		defaults.KeepEmptyStrings = *pkg.KeepEmptyStrings
 	}
+
 	if pkg.NoDefaultModifiers != nil {
 		defaults.NoDefaultModifiers = *pkg.NoDefaultModifiers
 	}
+
 	for dst, src := range map[*bool]*bool{&defaults.Validate: pkg.Validate, &defaults.WithIsSet: pkg.WithIsSet, &defaults.Strict: pkg.Strict} {
 		if src != nil {
 			*dst = *src
 		}
 	}
+
 	if len(pkg.Exclude) > 0 {
 		defaults.Exclude = pkg.Exclude
 	}
+
 	for dst, src := range map[*string]string{
 		&defaults.FuncPrefix:       pkg.FuncPrefix,
 		&defaults.InvertFuncPrefix: pkg.InvertFuncPrefix,
@@ -319,11 +339,13 @@ func mergePackageConfig(defaults *Defaults, pkg PackageConfig) {
 			*dst = src
 		}
 	}
+
 	if len(pkg.TypeDefaults) > 0 {
 		merged := maps.Clone(defaults.TypeDefaults)
 		if merged == nil {
 			merged = make(map[string]string, len(pkg.TypeDefaults))
 		}
+
 		maps.Copy(merged, pkg.TypeDefaults)
 		defaults.TypeDefaults = merged
 	}

@@ -290,31 +290,39 @@ func (c *GenerateCommand) preRun(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
+
 	c.warnings = &warningCounter{sink: warningSink(cmd.ErrOrStderr())}
+
 	registry, err := newSessionRegistry(c.warnings.warn, c.options, c.s.typeDefaults, c.s.disabledPluginNames())
 	if err != nil {
 		return err
 	}
+
 	c.registry = registry
 	if err = c.s.validateDirectory(); err != nil {
 		return err
 	}
+
 	if c.targets, err = c.s.targets(cmd.Flags()); err != nil {
 		return err
 	}
+
 	return c.s.validateNames()
 }
 
 func (c *GenerateCommand) run(cmd *cobra.Command, _ []string) error {
 	s := c.s
+
 	out := cmd.OutOrStdout()
 	if s.verbose {
 		_, _ = fmt.Fprintf(out, "Parsing directory: %s\nLooking for type: %s\n", s.directory, s.typeName)
 	}
+
 	var diagnostics io.Writer
 	if s.verbose {
 		diagnostics = out
 	}
+
 	warnings := c.warnings
 	preparer := semantic.New(c.registry,
 		semantic.WithPrefix(s.optionPrefix),
@@ -322,10 +330,12 @@ func (c *GenerateCommand) run(cmd *cobra.Command, _ []string) error {
 		semantic.WithExclude(s.exclude...),
 		semantic.WithWarningSink(warnings.warn),
 	)
+
 	var publisher application.Output = output.New(out, cmd.ErrOrStderr(), diagnostics, output.WithAllowedFormatters(s.allowFormatters...))
 	if s.strict {
 		publisher = strictOutput{next: publisher, warnings: warnings}
 	}
+
 	service := application.New(
 		reportingSource{source: source.Reader{File: filepath.Base(s.sourceFile)}, out: out, verbose: s.verbose},
 		reportingPreparer{preparer: preparer, out: out, verbose: s.verbose,
@@ -333,14 +343,18 @@ func (c *GenerateCommand) run(cmd *cobra.Command, _ []string) error {
 		generator.New(c.registry, plugin.NewPipeline(c.registry)),
 		publisher,
 	)
+
 	var artifacts []application.Artifact
+
 	for _, t := range c.targets {
 		generated, err := service.Generate(cmd.Context(), s.request(t))
 		if err != nil {
 			return err
 		}
+
 		artifacts = append(artifacts, generated...)
 	}
+
 	for _, artifact := range artifacts {
 		if s.dryRun {
 			printPreview(out, artifact.Path, artifact.Options, artifact.Content)
@@ -348,6 +362,7 @@ func (c *GenerateCommand) run(cmd *cobra.Command, _ []string) error {
 			_, _ = fmt.Fprintf(out, "Generated %s with %d option(s)\n", artifact.Path, artifact.Options)
 		}
 	}
+
 	return nil
 }
 
@@ -358,6 +373,7 @@ func printPreview(w io.Writer, outputPath string, options int, content []byte) {
 
 	_, _ = fmt.Fprintf(w, "DRY RUN: Would generate %s with %d option(s)\n", outputPath, options)
 	_, _ = fmt.Fprintf(w, "\n--- Generated content preview (first %d bytes) ---\n", previewBytes)
+
 	preview := content
 	if len(preview) > previewBytes {
 		preview = content[:previewBytes]
@@ -365,5 +381,6 @@ func printPreview(w io.Writer, outputPath string, options int, content []byte) {
 	} else {
 		_, _ = fmt.Fprintf(w, "%s\n", preview)
 	}
+
 	_, _ = fmt.Fprintf(w, "--- End preview ---\n")
 }

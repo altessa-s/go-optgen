@@ -21,6 +21,7 @@ func Example() {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println(c)
 	// Output:
 	// endpoint=api.example.com:443 userAgent="my-app/1.0 (darwin; arm64)"
@@ -31,6 +32,7 @@ func Example() {
 func Example_hostPort() {
 	_, err := customplugin.NewClient(customplugin.WithEndpoint("api.example.com"))
 	fmt.Println(err)
+
 	if addrErr, ok := errors.AsType[*net.AddrError](err); ok {
 		fmt.Println(addrErr.Addr)
 	}

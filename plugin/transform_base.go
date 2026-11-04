@@ -43,6 +43,7 @@ func (b *TransformBase) Meta() Meta {
 	if b.options == nil {
 		return Meta{Kind: KindTransform, Priority: DefaultPriority}
 	}
+
 	return Meta{Kind: KindTransform, ApplicableTypes: b.options.applicableTypes,
 		Priority: b.options.priority, DefaultForTypes: b.options.defaultForTypes, DisabledBy: b.options.disabledBy}
 }

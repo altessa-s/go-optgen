@@ -48,6 +48,7 @@ func (b *CheckBase) Spec() CheckSpec {
 	if b.options == nil {
 		return CheckSpec{Key: b.key, Priority: b.priority}
 	}
+
 	return CheckSpec{Key: b.key, Priority: b.priority, RequiresValue: b.options.requiresValue}
 }
 
@@ -56,5 +57,6 @@ func (b *CheckBase) Aliases() []string {
 	if b.options == nil {
 		return nil
 	}
+
 	return b.options.aliases
 }

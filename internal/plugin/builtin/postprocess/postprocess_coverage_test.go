@@ -85,6 +85,7 @@ func TestNonEmptyModifier(t *testing.T) {
 
 	t.Run("scalar string early-returns", func(t *testing.T) {
 		t.Parallel()
+
 		res := m.Generate(newCtx(true), model.OptField{Type: "string"}, "")
 		require.Equal(t, []string{`if v == "" {`, "  return nil", "}"}, res.Code)
 		require.False(t, res.Final)
@@ -93,18 +94,22 @@ func TestNonEmptyModifier(t *testing.T) {
 
 	t.Run("string slice filters into a new slice", func(t *testing.T) {
 		t.Parallel()
+
 		field := model.OptField{Type: "[]string", IsSlice: true, ElemType: "string"}
 		res := m.Generate(newCtx(false), field, "v")
 		require.Equal(t, "nonEmpty := make([]string, 0, len(v))", res.Code[0])
 		require.Equal(t, "nonEmpty", res.OutputVar, "the result is a new variable")
+
 		for _, line := range res.Code {
 			require.NotContains(t, line, "v = ", "the input is never reassigned")
 		}
+
 		require.False(t, res.Final)
 	})
 
 	t.Run("temp name avoids collision with input", func(t *testing.T) {
 		t.Parallel()
+
 		field := model.OptField{Type: "[]string", IsSlice: true, ElemType: "string"}
 		res := m.Generate(newCtx(false), field, "nonEmpty")
 		require.Equal(t, "nonEmpty2 := make([]string, 0, len(nonEmpty))", res.Code[0])
@@ -113,6 +118,7 @@ func TestNonEmptyModifier(t *testing.T) {
 
 	t.Run("unsupported type is a no-op", func(t *testing.T) {
 		t.Parallel()
+
 		res := m.Generate(newCtx(false), model.OptField{Type: "int"}, "v")
 		require.Empty(t, res.Code)
 		require.Equal(t, "v", res.OutputVar)

@@ -15,6 +15,7 @@ import (
 func ParseTag(tagStr, key string) string {
 	tagStr = strings.Trim(tagStr, "`")
 	tag := reflect.StructTag(tagStr)
+
 	return tag.Get(key)
 }
 
@@ -23,6 +24,7 @@ func ParseTag(tagStr, key string) string {
 func LookupTag(tagStr, key string) (value string, ok bool) {
 	tagStr = strings.Trim(tagStr, "`")
 	tag := reflect.StructTag(tagStr)
+
 	return tag.Lookup(key)
 }
 
@@ -35,6 +37,7 @@ func ParseOptName(tag string) (name string, skip bool) {
 	if tag == "-" {
 		return "", true
 	}
+
 	return tag, false
 }
 
@@ -58,12 +61,15 @@ func ParseExprList(s string) []string {
 	if s == "" {
 		return nil
 	}
+
 	if rest, ok := strings.CutPrefix(s, "["); ok {
 		if rest, ok = strings.CutSuffix(rest, "]"); ok {
 			s = rest
 		}
 	}
+
 	parts := smartSplit(s)
+
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -71,9 +77,11 @@ func ParseExprList(s string) []string {
 			out = append(out, p)
 		}
 	}
+
 	if len(out) == 0 {
 		return nil
 	}
+
 	return out
 }
 
@@ -81,24 +89,31 @@ func ParseExprList(s string) []string {
 // Bare flags are treated as true.
 func parseFlagKV(parts []string) map[string]string {
 	out := make(map[string]string)
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
+
 		if idx := strings.Index(part, "="); idx > 0 {
 			key := strings.TrimSpace(part[:idx])
+
 			value := strings.TrimSpace(part[idx+1:])
 			if key != "" {
 				out[key] = value
 			}
+
 			continue
 		}
+
 		out[part] = "true"
 	}
+
 	if len(out) == 0 {
 		return nil
 	}
+
 	return out
 }
 
@@ -109,7 +124,9 @@ func parseOptChecks(s string) map[string]string {
 	if s == "" {
 		return map[string]string{}
 	}
+
 	parts := smartSplit(s)
+
 	out := parseFlagKV(parts)
 	if len(out) == 0 {
 		return map[string]string{}
@@ -129,6 +146,7 @@ func bareKeys(parts []string) map[string]bool {
 			bare[part] = true
 		}
 	}
+
 	return bare
 }
 
@@ -141,20 +159,26 @@ func ParseOptGen(s string) (defaultVal string, metadata map[string]string) {
 	if s == "" {
 		return "", nil
 	}
+
 	parts := smartSplit(s)
+
 	metaParts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
+
 		if val, ok := strings.CutPrefix(part, "default="); ok {
 			defaultVal = val
 			continue
 		}
+
 		metaParts = append(metaParts, part)
 	}
+
 	metadata = parseFlagKV(metaParts)
+
 	return defaultVal, metadata
 }
 
@@ -165,26 +189,35 @@ func ParseOptGen(s string) (defaultVal string, metadata map[string]string) {
 //   - default={key: value}
 //   - default=time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 func smartSplit(s string) []string {
-	var parts []string
-	var current strings.Builder
+	var (
+		parts   []string
+		current strings.Builder
+	)
+
 	depth := 0
+
 	var quote rune
+
 	escaped := false
 
 	for _, r := range s {
 		if quote != 0 {
 			current.WriteRune(r)
+
 			if escaped {
 				escaped = false
 				continue
 			}
+
 			if r == '\\' {
 				escaped = true
 				continue
 			}
+
 			if r == quote {
 				quote = 0
 			}
+
 			continue
 		}
 
@@ -194,11 +227,13 @@ func smartSplit(s string) []string {
 			current.WriteRune(r)
 		case '[', '{', '(':
 			depth++
+
 			current.WriteRune(r)
 		case ']', '}', ')':
 			if depth > 0 {
 				depth--
 			}
+
 			current.WriteRune(r)
 		case ',':
 			if depth == 0 {

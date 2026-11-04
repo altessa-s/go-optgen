@@ -17,8 +17,11 @@ import (
 
 func TestRun_PanicInSubcommand_ReturnsErrorAndWritesToErr(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	var errOut bytes.Buffer
+
+	var (
+		out    bytes.Buffer
+		errOut bytes.Buffer
+	)
 
 	boom := &cobra.Command{
 		Use: "boom",
@@ -36,8 +39,11 @@ func TestRun_PanicInSubcommand_ReturnsErrorAndWritesToErr(t *testing.T) {
 
 func TestNew_UsesProvidedWriters(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	var errOut bytes.Buffer
+
+	var (
+		out    bytes.Buffer
+		errOut bytes.Buffer
+	)
 
 	cmd := rootcmd.New("testtool", "test", rootcmd.WithOut(&out), rootcmd.WithErr(&errOut), rootcmd.WithSubcommands(&cobra.Command{
 		Use: "hello", RunE: func(cmd *cobra.Command, _ []string) error {
@@ -54,7 +60,9 @@ func TestNew_UsesProvidedWriters(t *testing.T) {
 
 func TestNew_HelpAndVersion(t *testing.T) {
 	t.Parallel()
+
 	var out bytes.Buffer
+
 	cmd := rootcmd.New("testtool", "short text", rootcmd.WithOut(&out), rootcmd.WithLong("long text"), rootcmd.WithExample("testtool run"))
 	cmd.SetArgs([]string{"--help"})
 	require.NoError(t, cmd.ExecuteContext(t.Context()))
@@ -70,7 +78,9 @@ func TestNew_HelpAndVersion(t *testing.T) {
 
 func TestNew_RunsPreAndPostHooks(t *testing.T) {
 	t.Parallel()
+
 	var out bytes.Buffer
+
 	cmd := rootcmd.New("testtool", "test", rootcmd.WithOut(&out), rootcmd.WithSubcommands(&cobra.Command{
 		Use: "ok", Run: func(cmd *cobra.Command, _ []string) { _, _ = fmt.Fprint(cmd.OutOrStdout(), "ran") },
 	}))

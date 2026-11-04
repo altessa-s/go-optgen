@@ -24,11 +24,13 @@ func TestFailedFormattingPreservesExistingOutput(t *testing.T) {
 	path := filepath.Join(dir, "options_gen.go")
 	old := []byte("previous output")
 	require.NoError(t, os.WriteFile(path, old, 0o600))
+
 	w := output.New(io.Discard, io.Discard, nil)
 	require.Error(t, w.Write(t.Context(), path, []byte("package sample"), "gofmt --invalid-flag"))
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, old, data)
+
 	files, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	require.Len(t, files, 1)
@@ -38,6 +40,7 @@ func TestCanceledWriteDoesNotPublish(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	path := filepath.Join(t.TempDir(), "options_gen.go")
 	require.ErrorIs(t, output.New(io.Discard, io.Discard, nil).Write(ctx, path, nil, ""), context.Canceled)
 	require.NoFileExists(t, path)
@@ -45,12 +48,16 @@ func TestCanceledWriteDoesNotPublish(t *testing.T) {
 
 func TestWritePublishesFormattedOutput(t *testing.T) {
 	t.Parallel()
+
 	if _, err := exec.LookPath("gofmt"); err != nil {
 		t.Skip("gofmt not on PATH")
 	}
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "options_gen.go")
+
 	var diagnostics bytes.Buffer
+
 	w := output.New(io.Discard, io.Discard, &diagnostics)
 	require.NoError(t, w.Write(t.Context(), path, []byte("package sample\nvar  x=1\n"), `gofmt -w "{file}"`))
 	data, err := os.ReadFile(path)
@@ -69,11 +76,13 @@ func TestWritePublishesFormattedOutput(t *testing.T) {
 
 func TestWriteValidatesFormatter(t *testing.T) {
 	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "options_gen.go")
 	for _, formatter := range []string{"gofmt -w; rm x", "cat", "./gofmt", `C:\bin\gofmt`, "mytool"} {
 		err := output.New(io.Discard, io.Discard, nil).Write(t.Context(), path, nil, formatter)
 		require.ErrorContains(t, err, "invalid formatter", formatter)
 	}
+
 	require.NoFileExists(t, path)
 
 	err := output.New(io.Discard, io.Discard, nil, output.WithAllowedFormatters(" mytool ")).Write(t.Context(), path, nil, "mytool -w")

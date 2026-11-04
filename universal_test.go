@@ -31,6 +31,7 @@ func TestGenerateSeveralTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(check), "type CheckOption func(o *checkOptions)")
 	require.Contains(t, string(check), "func newCheckOptions(opts ...CheckOption) *checkOptions")
+
 	opts, err := os.ReadFile(filepath.Join(dir, "options_gen.go"))
 	require.NoError(t, err)
 	require.Contains(t, string(opts), "type Option func(o *options)")
@@ -81,11 +82,13 @@ func (rename) Apply(_ plugin.GenerationContext, _ model.OptField, _, expr string
 
 func TestWithPluginsRegistersExternalPlugins(t *testing.T) {
 	t.Parallel()
+
 	register := func(r *plugin.Registry) error {
 		return r.Register(&rename{TransformBase: plugin.NewTransformBase("rename", plugin.WithApplicableTypes("string"))})
 	}
 	dir := newPkgDir(t, "package sample\ntype options struct { name string `opt:\"Name\" optval:\"rename\"` }\n")
 	cmd := optgen.New(optgen.WithPlugins(register))
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -94,6 +97,7 @@ func TestWithPluginsRegistersExternalPlugins(t *testing.T) {
 	require.Contains(t, out.String(), "renamed(")
 
 	cmd = optgen.New(optgen.WithPlugins(register))
+
 	out.Reset()
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"list-plugins"})

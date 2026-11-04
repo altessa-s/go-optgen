@@ -28,8 +28,10 @@ func extractPackagePrefixes(expr string) []string {
 				i = skipLiteral(expr, i)
 				continue
 			}
+
 			i++
 		}
+
 		if i >= len(expr) {
 			break
 		}
@@ -38,6 +40,7 @@ func extractPackagePrefixes(expr string) []string {
 		for i < len(expr) && isIdentContinue(expr[i]) {
 			i++
 		}
+
 		ident := expr[start:i]
 		// Check if followed by '.'
 		if i < len(expr) && expr[i] == '.' {
@@ -47,6 +50,7 @@ func extractPackagePrefixes(expr string) []string {
 			}
 		}
 	}
+
 	return prefixes
 }
 
@@ -65,6 +69,7 @@ func skipLiteral(expr string, start int) int {
 			return i + 1
 		}
 	}
+
 	return len(expr)
 }
 
@@ -117,13 +122,16 @@ func (s importSet) add(path, alias string) {
 	if path == "" {
 		return
 	}
+
 	if existing, ok := s[path]; ok {
 		// Prefer explicit alias when present.
 		if existing.Alias == "" && alias != "" {
 			s[path] = model.GeneratedImport{Path: path, Alias: alias}
 		}
+
 		return
 	}
+
 	s[path] = model.GeneratedImport{Path: path, Alias: alias}
 }
 
@@ -133,12 +141,15 @@ func (s importSet) sorted() []model.GeneratedImport {
 	for _, imp := range s {
 		result = append(result, imp)
 	}
+
 	slices.SortFunc(result, func(a, b model.GeneratedImport) int {
 		if c := cmp.Compare(a.Path, b.Path); c != 0 {
 			return c
 		}
+
 		return cmp.Compare(a.Alias, b.Alias)
 	})
+
 	return result
 }
 
@@ -159,11 +170,13 @@ func indexImportsByName(localImports map[string]model.ImportInfo) map[string]mod
 		if _, after, ok := strings.CutLast(imp.Path, "/"); ok {
 			pathName = after
 		}
+
 		if pathName != key {
 			if _, exists := importByName[pathName]; !exists {
 				importByName[pathName] = imp
 			}
 		}
 	}
+
 	return importByName
 }

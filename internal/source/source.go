@@ -18,9 +18,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/altessa-s/go-optgen/model"
-
 	"golang.org/x/tools/go/packages"
+
+	"github.com/altessa-s/go-optgen/model"
 
 	optparser "github.com/altessa-s/go-optgen/internal/parser"
 )
@@ -44,14 +44,18 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+
 	loaded, typed, err := load(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
+
 	if len(loaded) == 0 {
 		return nil, fmt.Errorf("no packages found in %s", dir)
 	}
+
 	var out []model.SourcePackage
+
 	for _, pkg := range loaded {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -61,21 +65,26 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 		maps.DeleteFunc(pkg.ast.Files, func(name string, f *ast.File) bool {
 			return ast.IsGenerated(f) || (r.File != "" && r.File != "." && filepath.Base(name) != r.File)
 		})
+
 		var resolver optparser.TypeResolver
 		if typed {
 			resolver = typeFacts{info: pkg.info}
 		}
+
 		result, err := optparser.FindOptFields(pkg.ast, typeName, all, resolver)
 		if err != nil {
 			return nil, err
 		}
+
 		normalization, err := optparser.FindNormalizationMethod(pkg.ast, typeName)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, model.SourcePackage{Name: pkg.ast.Name, Fields: result.Fields, Imports: result.Imports, GenericInfo: result.GenericInfo,
 			NormalizationMethod: normalization, IsSetField: result.IsSetField})
 	}
+
 	return out, nil
 }
 
@@ -101,16 +110,19 @@ func load(ctx context.Context, dir string) ([]loadedPackage, bool, error) {
 		parsed, err := parseDir(dir)
 		return parsed, false, err
 	}
+
 	pkg := pkgs[0]
 	for _, e := range pkg.Errors {
 		if e.Kind == packages.ParseError {
 			return nil, false, fmt.Errorf("failed to parse directory: %w", errors.New(e.Error()))
 		}
 	}
+
 	files := make(map[string]*ast.File, len(pkg.Syntax))
 	for _, f := range pkg.Syntax {
 		files[filepath.Base(fset.File(f.Pos()).Name())] = f
 	}
+
 	return []loadedPackage{{ast: &ast.Package{Name: pkg.Name, Files: files}, info: pkg.TypesInfo}}, true, nil //nolint:staticcheck // See loadedPackage.
 }
 
@@ -122,10 +134,12 @@ func parseDir(dir string) ([]loadedPackage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse directory: %w", err)
 	}
+
 	out := make([]loadedPackage, 0, len(pkgs))
 	for _, name := range slices.Sorted(maps.Keys(pkgs)) {
 		out = append(out, loadedPackage{ast: pkgs[name]})
 	}
+
 	return out, nil
 }
 
@@ -139,18 +153,22 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 	if t == nil {
 		return optparser.TypeFacts{}, false
 	}
+
 	if _, ok := t.(*types.TypeParam); ok {
 		return optparser.TypeFacts{}, false
 	}
+
 	facts := optparser.TypeFacts{Interface: types.IsInterface(t), Comparable: types.Comparable(t)}
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
 		if u.Kind() == types.Invalid {
 			return optparser.TypeFacts{}, false
 		}
+
 		facts.Numeric = u.Info()&types.IsNumeric != 0 && u.Info()&types.IsComplex == 0
 	case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Signature, *types.Interface:
 		facts.Nilable = true
 	}
+
 	return facts, true
 }

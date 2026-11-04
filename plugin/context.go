@@ -97,6 +97,7 @@ func (ctx *GenerationContext) AddImport(path string, alias ...string) {
 			return
 		}
 	}
+
 	ctx.additionalImports[path] = imp
 }
 
@@ -108,11 +109,14 @@ func (ctx *GenerationContext) GetAdditionalImports() []model.GeneratedImport {
 	for _, imp := range ctx.additionalImports {
 		imports = append(imports, imp)
 	}
+
 	slices.SortFunc(imports, func(a, b model.GeneratedImport) int {
 		if c := cmp.Compare(a.Path, b.Path); c != 0 {
 			return c
 		}
+
 		return cmp.Compare(a.Alias, b.Alias)
 	})
+
 	return imports
 }

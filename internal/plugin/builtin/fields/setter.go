@@ -94,6 +94,7 @@ func (p *DefaultSetterPlugin) Generate(ctx plugin.GenerationContext, field model
 		// A plain string setter skips empty values like the generic one.
 		SkipEmpty: field.Type == "string" && ctx.StringSetter == model.StringSetterPlain && !ctx.KeepEmptyStrings,
 	}
+
 	return fieldtmpl.Execute(setterTemplate, data)
 }
 

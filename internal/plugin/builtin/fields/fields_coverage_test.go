@@ -30,6 +30,7 @@ func genericCtx() plugin.GenerationContext {
 // requireParses asserts the generated code is syntactically valid Go.
 func requireParses(tb testing.TB, code string) {
 	tb.Helper()
+
 	_, err := parser.ParseFile(token.NewFileSet(), "gen.go", "package pkg\n\n"+code, 0)
 	require.NoError(tb, err, code)
 }
@@ -77,11 +78,14 @@ func TestBoolFlagPlugin(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			code, err := p.Generate(newCtx(tc.returnsErr), tc.field, plugin.NewPipeline(testRegistry()))
 			require.NoError(t, err)
+
 			for _, s := range tc.contains {
 				require.Contains(t, code.Code, s)
 			}
+
 			requireParses(t, code.Code)
 		})
 	}
@@ -126,6 +130,7 @@ func TestNetIPParsePlugin(t *testing.T) {
 
 	p := &fields.NetIPParsePlugin{}
 	md := map[string]string{"parseip": "true"}
+
 	require.Equal(t, 40, p.Meta().Priority)
 	require.False(t, p.CanHandle(model.OptField{IsSlice: true, ElemType: "string", Metadata: md}))
 	require.False(t, p.CanHandle(model.OptField{IsSlice: true, ElemType: "net.IP"}))
@@ -135,6 +140,7 @@ func TestNetIPParsePlugin(t *testing.T) {
 
 	t.Run("replace, panic-free mode", func(t *testing.T) {
 		t.Parallel()
+
 		f := base
 		f.Metadata = map[string]string{"parseip": "true"}
 		ctx := newCtx(false)
@@ -144,16 +150,19 @@ func TestNetIPParsePlugin(t *testing.T) {
 		require.Contains(t, code.Code, "sets the ips option")
 		require.Contains(t, code.Code, "o.ips = netIPs")
 		requireParses(t, code.Code)
+
 		var paths []string
 		for _, imp := range ctx.GetAdditionalImports() {
 			paths = append(paths, imp.Path)
 		}
+
 		require.Contains(t, paths, "net")
 		require.NotContains(t, paths, "fmt")
 	})
 
 	t.Run("append with default error", func(t *testing.T) {
 		t.Parallel()
+
 		f := base
 		f.Metadata = map[string]string{"parseip": "true", "append": "true"}
 		ctx := newCtx(true)
@@ -162,21 +171,25 @@ func TestNetIPParsePlugin(t *testing.T) {
 		require.Contains(t, code.Code, "o.ips = append(o.ips, netIPs...)")
 		require.Contains(t, code.Code, `return fmt.Errorf("invalid IP %q", s)`)
 		requireParses(t, code.Code)
+
 		var paths []string
 		for _, imp := range ctx.GetAdditionalImports() {
 			paths = append(paths, imp.Path)
 		}
+
 		require.Contains(t, paths, "fmt")
 	})
 
 	t.Run("custom error expression", func(t *testing.T) {
 		t.Parallel()
+
 		f := base
 		f.Metadata = map[string]string{"parseip": "true", "err": " ErrBadIP "}
 		ctx := newCtx(true)
 		code, err := p.Generate(ctx, f, plugin.NewPipeline(testRegistry()))
 		require.NoError(t, err)
 		require.Contains(t, code.Code, "return ErrBadIP")
+
 		for _, imp := range ctx.GetAdditionalImports() {
 			require.NotEqual(t, "fmt", imp.Path)
 		}
@@ -192,6 +205,7 @@ func TestDefaultSetterPlugin(t *testing.T) {
 
 	t.Run("scalar", func(t *testing.T) {
 		t.Parallel()
+
 		f := model.OptField{FieldName: "timeout", OptionName: "Timeout", Type: "int"}
 		code, err := p.Generate(newCtx(false), f, plugin.NewPipeline(testRegistry()))
 		require.NoError(t, err)
@@ -202,6 +216,7 @@ func TestDefaultSetterPlugin(t *testing.T) {
 
 	t.Run("string uses generic overload with transforms and checks", func(t *testing.T) {
 		t.Parallel()
+
 		f := model.OptField{
 			FieldName: "name", OptionName: "Name", Type: "string",
 			Modifiers: []string{"upper"}, HasModifiers: true,
@@ -219,6 +234,7 @@ func TestDefaultSetterPlugin(t *testing.T) {
 
 	t.Run("string inside generic struct uses plain setter", func(t *testing.T) {
 		t.Parallel()
+
 		f := model.OptField{FieldName: "name", OptionName: "Name", Type: "string"}
 		code, err := p.Generate(genericCtx(), f, plugin.NewPipeline(testRegistry()))
 		require.NoError(t, err)
@@ -233,11 +249,13 @@ func testRegistry() *plugin.Registry {
 	if err := builtin.Register(r); err != nil {
 		panic(err)
 	}
+
 	return r
 }
 
 func TestRenderSettingsShapeOptions(t *testing.T) {
 	t.Parallel()
+
 	values := plugin.NewPipeline(testRegistry())
 	ctxWith := func(settings model.RenderSettings) plugin.GenerationContext {
 		settings.TypeName, settings.OptionType = "options", "Option"
@@ -247,6 +265,7 @@ func TestRenderSettingsShapeOptions(t *testing.T) {
 
 	t.Run("custom prefixes", func(t *testing.T) {
 		t.Parallel()
+
 		ctx := ctxWith(model.RenderSettings{FuncPrefix: "Set", InvertFuncPrefix: "Unset"})
 		code, err := (&fields.DefaultSetterPlugin{}).Generate(ctx, model.OptField{FieldName: "n", OptionName: "N", Type: "int"}, values)
 		require.NoError(t, err)
@@ -260,6 +279,7 @@ func TestRenderSettingsShapeOptions(t *testing.T) {
 
 	t.Run("plain string setter skips empty values", func(t *testing.T) {
 		t.Parallel()
+
 		code, err := (&fields.DefaultSetterPlugin{}).Generate(ctxWith(model.RenderSettings{StringSetter: model.StringSetterPlain}), str, values)
 		require.NoError(t, err)
 		require.Contains(t, code.Code, "func WithName(v string) Option")
@@ -269,6 +289,7 @@ func TestRenderSettingsShapeOptions(t *testing.T) {
 
 	t.Run("empty strings kept", func(t *testing.T) {
 		t.Parallel()
+
 		for _, mode := range []model.StringSetterMode{model.StringSetterGeneric, model.StringSetterPlain} {
 			code, err := (&fields.DefaultSetterPlugin{}).Generate(ctxWith(model.RenderSettings{StringSetter: mode, KeepEmptyStrings: true}), str, values)
 			require.NoError(t, err)

@@ -31,11 +31,13 @@ func runGenerate(tb testing.TB, args ...string) (string, string) {
 	require.NoError(tb, os.WriteFile(filepath.Join(dir, "options.go"), []byte(sampleSource), 0o600))
 
 	cmd := optgen.NewGenerate()
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs(append([]string{"--directory", dir, "--no-config", "--no-format"}, args...))
 	require.NoError(tb, cmd.ExecuteContext(tb.Context()))
+
 	return dir, out.String()
 }
 
@@ -85,6 +87,7 @@ func TestGenerate_NoTaggedStruct(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "x.go"), []byte("package sample\n\ntype other struct{}\n"), 0o600))
 
 	cmd := optgen.NewGenerate()
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -94,12 +97,14 @@ func TestGenerate_NoTaggedStruct(t *testing.T) {
 
 func TestGenerate_NestedModuleConfig(t *testing.T) {
 	t.Parallel()
+
 	for _, pkg := range []string{"providers/s3", "providers/s3/client"} {
 		t.Run(pkg, func(t *testing.T) {
 			t.Parallel()
 			root := t.TempDir()
 			dir := filepath.Join(root, filepath.FromSlash(pkg))
 			require.NoError(t, os.MkdirAll(dir, 0o750))
+
 			files := map[string]string{
 				".git":                "gitdir: /unused/worktree\n",
 				"go.mod":              "module example.com/root\n",

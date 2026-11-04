@@ -21,6 +21,7 @@ type TrimSuffixTransformPlugin struct {
 func (t *TrimSuffixTransformPlugin) Apply(ctx plugin.GenerationContext, field model.OptField, _ string, expr string) (string, bool) {
 	// Find the suffix parameter from field.Modifiers
 	suffix := ""
+
 	const keyPrefix = "trimsuffix="
 	for _, mod := range field.Modifiers {
 		if len(mod) > len(keyPrefix) && strings.EqualFold(mod[:len(keyPrefix)], keyPrefix) {
@@ -28,10 +29,12 @@ func (t *TrimSuffixTransformPlugin) Apply(ctx plugin.GenerationContext, field mo
 			break
 		}
 	}
+
 	if suffix == "" {
 		return expr, false
 	}
 
 	ctx.AddImport("strings")
+
 	return "strings.TrimSuffix(" + expr + ", " + quote(suffix) + ")", true
 }

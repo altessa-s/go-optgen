@@ -24,22 +24,27 @@ func newPkgDir(tb testing.TB, src string) string {
 	dir := tb.TempDir()
 	require.NoError(tb, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n"), 0o600))
 	require.NoError(tb, os.WriteFile(filepath.Join(dir, "options.go"), []byte(src), 0o600))
+
 	return dir
 }
 
 func execGenerate(tb testing.TB, args ...string) (string, error) {
 	tb.Helper()
+
 	cmd := optgen.NewGenerate()
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs(args)
 	err := cmd.ExecuteContext(tb.Context())
+
 	return out.String(), err
 }
 
 func requireGofmt(tb testing.TB) {
 	tb.Helper()
+
 	if _, err := exec.LookPath("gofmt"); err != nil {
 		tb.Skip("gofmt not on PATH")
 	}
@@ -107,6 +112,7 @@ packages:
 
 	content, err := os.ReadFile(filepath.Join(dir, "settings_gen.go"))
 	require.NoError(t, err)
+
 	src := string(content)
 	require.Contains(t, src, "func WithMyName[")
 	require.Contains(t, src, ") Setting {")
@@ -154,6 +160,7 @@ func TestGenerate_Formatter(t *testing.T) {
 		out, err := execGenerate(t, "--directory", dir, "--no-config", "--verbose",
 			"--formatter", `gofmt '-l' "{file}"`)
 		require.NoError(t, err)
+
 		path := filepath.Join(dir, "options_gen.go")
 		require.Contains(t, out, "Formatting with: gofmt -l "+path+"\n")
 	})
@@ -185,6 +192,7 @@ func TestGenerate_Formatter(t *testing.T) {
 
 func TestGenerate_FormatterRejected(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name      string
 		formatter string
@@ -258,7 +266,9 @@ func TestGenerate_ParseErrors(t *testing.T) {
 
 func TestListPlugins(t *testing.T) {
 	t.Parallel()
+
 	cmd := optgen.New()
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -269,6 +279,7 @@ func TestListPlugins(t *testing.T) {
 	for _, section := range []string{"Field plugins:", "Type default providers:", "Transform plugins:", "Modifier plugins:", "Optcheck plugins:"} {
 		require.Contains(t, s, section)
 	}
+
 	require.True(t, strings.Contains(s, "BoolFlagPlugin") || strings.Contains(s, "priority="), s)
 	require.Contains(t, s, `  - RequiredCheck (key="required", aliases=nonempty)`)
 }

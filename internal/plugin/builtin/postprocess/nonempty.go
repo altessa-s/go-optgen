@@ -61,6 +61,7 @@ func (m *NonEmptyModifier) Generate(ctx plugin.GenerationContext, field model.Op
 		if strings.EqualFold(inputVar, tmp) {
 			tmp = "nonEmpty2"
 		}
+
 		code := []string{
 			tmp + " := make([]string, 0, len(" + inputVar + "))",
 			"for _, x := range " + inputVar + " {",
@@ -69,6 +70,7 @@ func (m *NonEmptyModifier) Generate(ctx plugin.GenerationContext, field model.Op
 			"  }",
 			"}",
 		}
+
 		return plugin.ModifierResult{Code: code, OutputVar: tmp}
 	}
 

@@ -29,10 +29,12 @@ func IsTruthyMetadata(md map[string]string, key string) bool {
 	if md == nil {
 		return false
 	}
+
 	v, ok := md[key]
 	if !ok {
 		return false
 	}
+
 	return IsTruthyString(v)
 }
 

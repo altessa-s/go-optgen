@@ -14,6 +14,7 @@ import (
 
 func TestRenderSettingsVerify(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		name     string
 		settings model.RenderSettings
@@ -33,11 +34,13 @@ func TestRenderSettingsVerify(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := tc.settings.Verify()
 			if tc.valid {
 				require.NoError(t, err)
 				return
 			}
+
 			require.ErrorIs(t, err, model.ErrInvalidSettings)
 		})
 	}

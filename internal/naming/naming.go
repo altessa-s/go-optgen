@@ -82,6 +82,7 @@ func OptionName(fieldName string) string {
 			b.WriteString(upper)
 			continue
 		}
+
 		b.WriteString(capitalizeFirst(word))
 	}
 

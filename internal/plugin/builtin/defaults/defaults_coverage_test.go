@@ -54,11 +54,13 @@ func testRegistry() *plugin.Registry {
 	if err := defaults.Register(r); err != nil {
 		panic(err)
 	}
+
 	return r
 }
 
 func TestDurationDefaultNormalized(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct{ typ, def, want string }{
 		{"time.Duration", "30s", "30 * time.Second"},
 		{"time.Duration", "1h30m", "90 * time.Minute"},
@@ -69,6 +71,7 @@ func TestDurationDefaultNormalized(t *testing.T) {
 	} {
 		require.Equal(t, tc.want, testRegistry().NormalizeDefault(tc.typ, tc.def), "%s %q", tc.typ, tc.def)
 	}
+
 	r := testRegistry()
 	require.NoError(t, r.DisablePlugins("DurationDefaultPlugin"))
 	require.Equal(t, "30s", r.NormalizeDefault("time.Duration", "30s"), "a disabled normalizer is skipped")

@@ -18,6 +18,7 @@ func BenchmarkGenerate(b *testing.B) {
 	if err := builtin.Register(r); err != nil {
 		b.Fatal(err)
 	}
+
 	g := generator.New(r, plugin.NewPipeline(r))
 	in := model.GenerateInput{
 		PackageName:         "sample",

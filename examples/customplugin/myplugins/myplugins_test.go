@@ -20,7 +20,9 @@ import (
 
 func TestRegisterAlongsideBuiltins(t *testing.T) {
 	t.Parallel()
+
 	cmd := optgen.New(optgen.WithPlugins(myplugins.Register))
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"list-plugins"})
@@ -33,9 +35,12 @@ func TestHostPortRejectsNonStringField(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	src := "package sample\ntype options struct { port int `opt:\"Port\" optcheck:\"hostport\"` }\n"
+
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte(src), 0o600))
+
 	cmd := optgen.New(optgen.WithPlugins(myplugins.Register))
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)

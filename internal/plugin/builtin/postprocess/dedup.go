@@ -103,6 +103,7 @@ func (m *DedupModifier) Generate(_ plugin.GenerationContext, field model.OptFiel
 	if inputVar == out {
 		out = "deduped2"
 	}
+
 	return plugin.ModifierResult{
 		Code: []string{
 			out + " := make([]" + field.ElemType + ", 0, len(" + inputVar + "))",

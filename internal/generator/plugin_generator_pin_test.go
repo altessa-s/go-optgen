@@ -30,6 +30,7 @@ func TestSourceImports_Pin(t *testing.T) {
 
 	t.Run("default expression by package name", func(t *testing.T) {
 		t.Parallel()
+
 		f := model.OptField{FieldName: "cfg", Default: "api.DefaultConfig()"}
 		local := map[string]model.ImportInfo{"vaultApi": {Path: "github.com/hashicorp/vault/api", Alias: "vaultApi"}}
 		got := sourceImports([]model.OptField{f}, local, nil)
@@ -48,6 +49,7 @@ func TestSourceImports_Pin(t *testing.T) {
 
 	t.Run("string and rune literals in defaults name no package", func(t *testing.T) {
 		t.Parallel()
+
 		f := model.OptField{FieldName: "addr", Default: `"a.b" + x.Y + ` + "`c.d` + string('e') + \"f\\\".g\""}
 		local := map[string]model.ImportInfo{"a": {Path: "example.com/a"}, "c": {Path: "example.com/c"}, "g": {Path: "example.com/g"},
 			"x": {Path: "example.com/x"}}
@@ -57,6 +59,7 @@ func TestSourceImports_Pin(t *testing.T) {
 
 	t.Run("an import without a path is dropped and the result is sorted", func(t *testing.T) {
 		t.Parallel()
+
 		f1 := model.OptField{FieldName: "x", Default: "x.Y + z.W"}
 		f2 := typeExpr(t, "b.T")
 		f2.TypeImports = []model.GeneratedImport{{Path: "example.com/b"}}

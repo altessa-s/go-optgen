@@ -34,6 +34,7 @@ func Execute(tmpl *template.Template, data any) (plugin.GeneratedCode, error) {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return plugin.GeneratedCode{}, err
 	}
+
 	return plugin.GeneratedCode{Code: buf.String()}, nil
 }
 
@@ -77,19 +78,26 @@ func docComment(doc string) string {
 	if doc == "" {
 		return ""
 	}
+
 	var b strings.Builder
 	b.WriteString("\n//")
+
 	for line := range strings.Lines(doc) {
 		line = strings.TrimRight(line, " \t\r\n")
+
 		b.WriteString("\n//")
+
 		if line == "" {
 			continue
 		}
+
 		if !strings.HasPrefix(line, "\t") {
 			b.WriteByte(' ')
 		}
+
 		b.WriteString(line)
 	}
+
 	return b.String()
 }
 
@@ -105,10 +113,12 @@ type Data struct {
 // NewData runs values for field starting from inputVar.
 func NewData(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline, inputVar string) Data {
 	result := values.BuildPipeline(ctx, field, inputVar)
+
 	code := ""
 	if result.Code != "" {
 		code = "\t\t" + strings.ReplaceAll(result.Code, "\n", "\n\t\t") + "\n"
 	}
+
 	return Data{BaseData: NewBaseData(ctx, field), PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
 }
 
@@ -118,5 +128,6 @@ func markSet(ctx plugin.GenerationContext, field model.OptField) string {
 	if !ctx.WithIsSet || ctx.IsSetField == "" {
 		return ""
 	}
+
 	return "o." + ctx.IsSetField + " |= 1 << " + ctx.IsSetConst(field) + "; "
 }

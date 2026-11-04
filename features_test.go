@@ -59,9 +59,11 @@ func TestFeatures(t *testing.T) {
 
 func TestGenerateFeaturesCompileAndRun(t *testing.T) {
 	t.Parallel()
+
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go not on PATH")
 	}
+
 	dir := newPkgDir(t, featuresSource)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "options_test.go"), []byte(featuresTest), 0o600))
@@ -92,6 +94,7 @@ func TestGenerateStrictRejectsWarnings(t *testing.T) {
 
 func TestGenerateRejectsInvalidFeatureFlags(t *testing.T) {
 	t.Parallel()
+
 	dir := newPkgDir(t, sampleSource)
 	for _, args := range [][]string{
 		{"--defaults-from", "file"},
