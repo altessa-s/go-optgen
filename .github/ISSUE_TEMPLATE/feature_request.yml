@@ -40,10 +40,20 @@ body:
         - internal/naming
         - internal/output
         - internal/parser
+        - internal
         - internal/plugin
+        - internal/plugin/builtin
+        - internal/plugin/builtin/check
+        - internal/plugin/builtin/defaults
+        - internal/plugin/builtin/fields
+        - internal/plugin/builtin/fieldtmpl
+        - internal/plugin/builtin/guard
+        - internal/plugin/builtin/postprocess
+        - internal/plugin/builtin/transform
         - internal/rootcmd
         - internal/semantic
         - internal/source
+        - examples
         - devtools
         - ci
         - new package

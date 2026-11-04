@@ -10,20 +10,30 @@ README                      # Root README
 docs                        # Documentation
 
 # Packages
-optgen                      # Root package: the generate API
-cmd/optgen                  # optgen binary
-config                      # .optgen.yaml loading
-model                       # Parsed option model
-plugin                      # Public plugin API and registry
-internal/application        # Generation use case and ports
-internal/generator          # Code generation and templates
-internal/naming             # Option naming and initialisms
-internal/output             # Atomic file publication and formatting
-internal/parser             # Struct and tag parsing
-internal/plugin             # Built-in plugins (check, defaults, fields, guard, postprocess, transform)
-internal/rootcmd            # Cobra root command
-internal/semantic           # Policy preparation and check validation
-internal/source             # AST directory source adapter
+optgen                                # Root package: the generate API
+cmd/optgen                            # optgen binary
+config                                # .optgen.yaml loading
+model                                 # Parsed option model
+plugin                                # Public plugin API and registry
+internal/application                  # Generation use case and ports
+internal/generator                    # Code generation and templates
+internal/naming                       # Option naming and initialisms
+internal/output                       # Atomic file publication and formatting
+internal/parser                       # Struct and tag parsing
+internal                              # Internal package layout and architecture tests
+internal/plugin                       # Built-in plugins
+internal/plugin/builtin               # Registration of every built-in plugin
+internal/plugin/builtin/check         # Check plugin
+internal/plugin/builtin/defaults      # Type defaults plugin
+internal/plugin/builtin/fields        # Fields plugin
+internal/plugin/builtin/fieldtmpl     # Templates and option data shared by the built-in plugins
+internal/plugin/builtin/guard         # Guard plugin
+internal/plugin/builtin/postprocess   # Postprocess plugin
+internal/plugin/builtin/transform     # Transform plugin
+internal/rootcmd                      # Cobra root command
+internal/semantic                     # Policy preparation and check validation
+internal/source                       # AST directory source adapter
+examples                              # Example programs
 
 # Tooling
 devtools                    # Development tool dependencies
