@@ -66,6 +66,7 @@ func typeCheckGenerated(tb testing.TB, relDir string, generated []byte) {
 
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(tb, ok, "runtime.Caller failed")
+
 	dir := filepath.Join(filepath.Dir(thisFile), relDir)
 
 	fset := token.NewFileSet()
@@ -89,22 +90,27 @@ func requireParamsNotReassigned(tb testing.TB, generated []byte) {
 
 	file, err := parser.ParseFile(token.NewFileSet(), "options_gen.go", generated, 0)
 	require.NoError(tb, err, "parse generated output")
+
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Body == nil {
 			continue
 		}
+
 		params := map[string]bool{}
+
 		for _, field := range fn.Type.Params.List {
 			for _, name := range field.Names {
 				params[name.Name] = true
 			}
 		}
+
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			lit, ok := n.(*ast.FuncLit)
 			if !ok {
 				return true
 			}
+
 			ast.Inspect(lit.Body, func(n ast.Node) bool {
 				if assign, ok := n.(*ast.AssignStmt); ok && assign.Tok == token.ASSIGN {
 					for _, lhs := range assign.Lhs {
@@ -113,8 +119,10 @@ func requireParamsNotReassigned(tb testing.TB, generated []byte) {
 						}
 					}
 				}
+
 				return true
 			})
+
 			return false
 		})
 	}
@@ -125,11 +133,13 @@ func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName,
 
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(tb, ok, "runtime.Caller failed")
+
 	dir := filepath.Join(filepath.Dir(thisFile), relDir)
 
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, dir, nil, parser.ParseComments)
 	require.NoError(tb, err, "ParseDir")
+
 	pkg, ok := pkgs[pkgName]
 	require.True(tb, ok, "expected package %q in %s", pkgName, dir)
 
@@ -142,6 +152,7 @@ func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName,
 	r := testRegistry()
 	result.Fields, err = semantic.New(r).Prepare(result.Fields)
 	require.NoError(tb, err)
+
 	g := generator.New(r, plugin.NewPipeline(r))
 	got, err := g.Generate(model.GenerateInput{
 		TypeName:            "options",
@@ -180,5 +191,6 @@ func testRegistry() *plugin.Registry {
 	if err := builtin.Register(r); err != nil {
 		panic(err)
 	}
+
 	return r
 }

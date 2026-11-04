@@ -19,6 +19,7 @@ func parseFieldTags(tagStr string) parsedFieldTags {
 
 	if genTag := ParseTag(tagStr, "optgen"); genTag != "" {
 		genDefault, genMeta := ParseOptGen(genTag)
+
 		out.Default = genDefault
 		if len(genMeta) > 0 {
 			out.Metadata = maps.Clone(genMeta)

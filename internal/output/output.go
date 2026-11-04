@@ -64,11 +64,13 @@ func validateFormatter(formatter string, extra []string) (executable string, arg
 	if strings.ContainsAny(executable, `/\`) {
 		return "", nil, false, fmt.Errorf("formatter %q must be a command name resolved from PATH, not a path", executable)
 	}
+
 	baseName := executable
 
 	if !allowedFormatters[baseName] && !slices.Contains(extra, baseName) {
 		allowed := slices.Concat(slices.Collect(maps.Keys(allowedFormatters)), extra)
 		slices.Sort(allowed)
+
 		return "", nil, false, fmt.Errorf("formatter %q is not in the allowlist; allowed formatters: %s", baseName, strings.Join(allowed, ", "))
 	}
 
@@ -78,8 +80,11 @@ func validateFormatter(formatter string, extra []string) (executable string, arg
 // parseFormatterArgs splits a formatter string into arguments, respecting quotes.
 // Supports both double and single quotes. Quotes are removed from the result.
 func parseFormatterArgs(s string) []string {
-	var args []string
-	var current strings.Builder
+	var (
+		args    []string
+		current strings.Builder
+	)
+
 	var inQuote rune // 0 if not in quote, otherwise the quote character
 
 	for _, r := range s {
@@ -132,22 +137,28 @@ func (w Writer) Write(ctx context.Context, path string, content []byte, formatte
 	if err != nil {
 		return fmt.Errorf("invalid formatter: %w", err)
 	}
+
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+
 	file, err := os.CreateTemp(filepath.Dir(path), ".optgen-*.go")
 	if err != nil {
 		return err
 	}
+
 	temporary := file.Name()
 	defer func() { _ = os.Remove(temporary) }()
+
 	if _, err = file.Write(content); err != nil {
 		_ = file.Close()
 		return err
 	}
+
 	if err = file.Close(); err != nil {
 		return err
 	}
+
 	if executable != "" {
 		if placeholder {
 			for i := range args {
@@ -156,22 +167,28 @@ func (w Writer) Write(ctx context.Context, path string, content []byte, formatte
 		} else {
 			args = append(args, temporary)
 		}
+
 		if w.diagnostics != nil {
 			display := strings.ReplaceAll(strings.Join(args, " "), temporary, path)
 			_, _ = fmt.Fprintf(w.diagnostics, "Formatting with: %s %s\n", executable, display)
 		}
+
 		command := exec.CommandContext(ctx, executable, args...) // #nosec G204 -- Executable validated against the formatter allowlist.
 		command.Stdout = w.out
+
 		command.Stderr = w.err
 		if err = command.Run(); err != nil {
 			return fmt.Errorf("failed to format %s with %q: %w", path, formatter, err)
 		}
 	}
+
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+
 	if err := os.Chmod(temporary, defaultFilePermission); err != nil { // #nosec G302 -- Generated Go source is world-readable like any source file.
 		return err
 	}
+
 	return os.Rename(temporary, path)
 }

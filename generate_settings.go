@@ -81,14 +81,18 @@ func (s *generateSettings) loadConfig(flags changedFlags, out io.Writer) error {
 	if configPath == "" {
 		return nil
 	}
+
 	cfg, err := readConfigFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config %s: %w", configPath, err)
 	}
+
 	if s.verbose {
 		_, _ = fmt.Fprintf(out, "Loaded config from: %s\n", configPath)
 	}
+
 	s.applyConfig(flags, cfg.GetPackageConfig(packagePath(projectRoot, s.directory)))
+
 	return nil
 }
 
@@ -98,15 +102,19 @@ func packagePath(projectRoot, dir string) string {
 	if projectRoot == "" {
 		return dir
 	}
+
 	absDir, errDir := filepath.Abs(dir)
+
 	absRoot, errRoot := filepath.Abs(projectRoot)
 	if errDir != nil || errRoot != nil {
 		return dir
 	}
+
 	rel, err := filepath.Rel(absRoot, absDir)
 	if err != nil {
 		return dir
 	}
+
 	return "./" + rel
 }
 
@@ -118,9 +126,11 @@ func (s *generateSettings) applyConfig(flags changedFlags, cfg optconfig.Default
 	defaultString(flags, "default-func-name", &s.defaultFunc, cfg.DefaultFuncName)
 	defaultString(flags, "new-func-name", &s.newFunc, cfg.NewFuncName)
 	defaultString(flags, "option-prefix", &s.optionPrefix, cfg.OptionPrefix)
+
 	if cfg.Formatter != nil && !flags.Changed("formatter") {
 		s.formatter = *cfg.Formatter
 	}
+
 	if len(cfg.DisablePlugins) > 0 && !flags.Changed("disable-plugins") {
 		s.disablePlugins = strings.Join(cfg.DisablePlugins, ",")
 	}
@@ -144,6 +154,7 @@ func (s *generateSettings) applyConfig(flags changedFlags, cfg optconfig.Default
 	defaultBool(flags, "strict", &s.strict, cfg.Strict)
 	defaultString(flags, "defaults-from", &s.defaultsFrom, cfg.DefaultsFrom)
 	defaultString(flags, "slice-setter", &s.sliceSetter, cfg.SliceSetter)
+
 	if len(cfg.Exclude) > 0 && !flags.Changed("exclude") {
 		s.exclude = cfg.Exclude
 	}
@@ -170,6 +181,7 @@ func (s *generateSettings) disabledPluginNames() []string {
 	if s.disablePlugins == "" {
 		return nil
 	}
+
 	return strings.Split(s.disablePlugins, ",")
 }
 
@@ -181,11 +193,14 @@ func (s *generateSettings) validateDirectory() error {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("directory does not exist: %s", s.directory)
 		}
+
 		return fmt.Errorf("failed to access directory %s: %w", s.directory, err)
 	}
+
 	if !info.IsDir() {
 		return fmt.Errorf("path is not a directory: %s", s.directory)
 	}
+
 	return nil
 }
 
@@ -195,26 +210,32 @@ func (s *generateSettings) validateDirectory() error {
 // flags that name a single output must not be set explicitly.
 func (s *generateSettings) targets(flags changedFlags) ([]target, error) {
 	var types []string
+
 	for name := range strings.SplitSeq(s.typeName, ",") {
 		if name = strings.TrimSpace(name); name != "" {
 			types = append(types, name)
 		}
 	}
+
 	if len(types) == 0 {
 		return nil, errors.New("type name cannot be empty")
 	}
+
 	if len(types) == 1 {
 		t := target{typeName: types[0], output: cmp.Or(s.output, defaultOutputFile), optionType: s.optionType,
 			defaultFunc: s.defaultFunc, newFunc: s.newFunc}
 		t.defaultFunc = cmp.Or(t.defaultFunc, "default"+capitalizeFirst(t.typeName))
 		t.newFunc = cmp.Or(t.newFunc, "new"+capitalizeFirst(t.typeName))
+
 		return []target{t}, t.validate()
 	}
+
 	for _, name := range []string{"output", "option-type", "default-func-name", "new-func-name"} {
 		if flags.Changed(name) {
 			return nil, fmt.Errorf("--%s names a single output and cannot be used with several types", name)
 		}
 	}
+
 	out := make([]target, 0, len(types))
 	for _, name := range types {
 		t := target{typeName: name, output: snakeCase(name) + "_gen.go", optionType: derivedOptionType(name),
@@ -222,8 +243,10 @@ func (s *generateSettings) targets(flags changedFlags) ([]target, error) {
 		if err := t.validate(); err != nil {
 			return nil, err
 		}
+
 		out = append(out, t)
 	}
+
 	return out, nil
 }
 
@@ -237,15 +260,19 @@ func derivedOptionType(typeName string) string {
 // snakeCase converts a Go identifier to snake case: checkOptions -> check_options.
 func snakeCase(name string) string {
 	var b strings.Builder
+
 	for i, r := range name {
 		if unicode.IsUpper(r) {
 			if i > 0 {
 				b.WriteByte('_')
 			}
+
 			r = unicode.ToLower(r)
 		}
+
 		b.WriteRune(r)
 	}
+
 	return b.String()
 }
 
@@ -254,6 +281,7 @@ func (t target) validate() error {
 	if t.optionType == "" {
 		return errors.New("option type cannot be empty")
 	}
+
 	for _, name := range []struct{ what, value string }{
 		{"type name", t.typeName},
 		{"option type", t.optionType},
@@ -264,9 +292,11 @@ func (t target) validate() error {
 			return fmt.Errorf("invalid %s: %q is not a valid Go identifier", name.what, name.value)
 		}
 	}
+
 	if t.defaultFunc == t.newFunc {
 		return fmt.Errorf("default and new function names must differ (both are %q)", t.defaultFunc)
 	}
+
 	return nil
 }
 
@@ -275,21 +305,25 @@ func (s *generateSettings) validateNames() error {
 	if s.optionPrefix != "" && !token.IsIdentifier(s.optionPrefix) {
 		return fmt.Errorf("invalid option prefix: %q is not a valid Go identifier", s.optionPrefix)
 	}
+
 	for _, name := range []struct{ what, value string }{{"function prefix", s.funcPrefix}, {"invert function prefix", s.invertFuncPrefix}} {
 		if name.value != "" && !token.IsIdentifier(name.value+"X") {
 			return fmt.Errorf("invalid %s: %q cannot start a Go identifier", name.what, name.value)
 		}
 	}
+
 	for _, pattern := range s.exclude {
 		if _, err := path.Match(pattern, ""); err != nil {
 			return fmt.Errorf("invalid --exclude pattern %q: %w", pattern, err)
 		}
 	}
+
 	for _, name := range s.allowFormatters {
 		if strings.ContainsAny(name, `/\`) || strings.TrimSpace(name) == "" {
 			return fmt.Errorf("invalid --allow-formatter %q: want a command name resolved from PATH", name)
 		}
 	}
+
 	return nil
 }
 
@@ -298,6 +332,7 @@ func capitalizeFirst(s string) string {
 	if s == "" {
 		return s
 	}
+
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
@@ -318,10 +353,12 @@ func (s *generateSettings) request(t target) application.Request {
 	case source == model.DefaultsFromFunc && name == "":
 		name = "getDefault" + capitalizeFirst(t.typeName)
 	}
+
 	formatter := s.formatter
 	if s.noFormat {
 		formatter = ""
 	}
+
 	return application.Request{
 		Directory: s.directory,
 		Output:    t.output,

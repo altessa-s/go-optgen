@@ -29,13 +29,16 @@ func (p *DurationDefaultPlugin) NormalizeDefault(typeStr, def string) (string, b
 	if typeStr != "time.Duration" {
 		return "", false
 	}
+
 	if _, err := parser.ParseExpr(def); err == nil {
 		return "", false
 	}
+
 	d, err := time.ParseDuration(def)
 	if err != nil {
 		return "", false
 	}
+
 	for _, unit := range []struct {
 		d    time.Duration
 		name string
@@ -44,5 +47,6 @@ func (p *DurationDefaultPlugin) NormalizeDefault(typeStr, def string) (string, b
 			return strconv.FormatInt(int64(d/unit.d), 10) + " * time." + unit.name, true
 		}
 	}
+
 	return "time.Duration(" + strconv.FormatInt(int64(d), 10) + ")", true
 }

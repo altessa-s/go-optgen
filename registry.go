@@ -26,19 +26,23 @@ func newSessionRegistry(warn func(string), o *options, typeDefaults map[string]s
 	if err := builtin.Register(r); err != nil {
 		return nil, fmt.Errorf("failed to register built-in plugins: %w", err)
 	}
+
 	if len(typeDefaults) > 0 {
 		if err := r.Register(defaults.NewConfigured(typeDefaults)); err != nil {
 			return nil, fmt.Errorf("failed to register configured type defaults: %w", err)
 		}
 	}
+
 	for _, register := range o.plugins {
 		if err := register(r); err != nil {
 			return nil, fmt.Errorf("failed to register plugins: %w", err)
 		}
 	}
+
 	if err := r.DisablePlugins(disabled...); err != nil {
 		return nil, err
 	}
+
 	return r, nil
 }
 
@@ -66,6 +70,7 @@ func (w *warningCounter) warn(msg string) {
 func (w *warningCounter) reported() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
 	return w.count
 }
 
@@ -82,5 +87,6 @@ func (s strictOutput) Write(ctx context.Context, path string, content []byte, fo
 	if n := s.warnings.reported(); n > 0 {
 		return fmt.Errorf("%w: %d warning(s); %s not written", errStrictWarnings, n, path)
 	}
+
 	return s.next.Write(ctx, path, content, formatter)
 }

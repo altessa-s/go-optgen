@@ -26,6 +26,7 @@ func (c *NonZeroCheck) Validate(field model.OptField, _ string) error {
 	if !plugin.IsNumericField(field) {
 		return notApplicable(field, strings.Join(plugin.NumericTypes(), ", "))
 	}
+
 	return nil
 }
 

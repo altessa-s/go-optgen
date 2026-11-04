@@ -18,6 +18,7 @@ import (
 
 func TestReaderExcludesTestsAndGeneratedFiles(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	for name, src := range map[string]string{
 		"options.go":     "package sample\ntype options struct { count int `opt:\"Count\"` }",
@@ -28,6 +29,7 @@ func TestReaderExcludesTestsAndGeneratedFiles(t *testing.T) {
 	} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600))
 	}
+
 	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
 	require.NoError(t, err)
 	require.Len(t, packages, 1)
@@ -42,6 +44,7 @@ func TestReaderExcludesTestsAndGeneratedFiles(t *testing.T) {
 
 func TestReaderResolvesTypesInsideModules(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	for name, src := range map[string]string{
 		"go.mod": "module sample\n\ngo 1.26\n",
@@ -51,13 +54,16 @@ func TestReaderResolvesTypesInsideModules(t *testing.T) {
 	} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600))
 	}
+
 	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
 	require.NoError(t, err)
 	require.Len(t, packages, 1)
+
 	byName := make(map[string]model.OptField)
 	for _, f := range packages[0].Fields {
 		byName[f.FieldName] = f
 	}
+
 	require.True(t, byName["w"].TypeResolved)
 	require.True(t, byName["w"].IsInterface, "named interfaces are recognized")
 	require.True(t, byName["port"].IsNumeric)
@@ -76,6 +82,7 @@ func TestReaderFallsBackOutsideModules(t *testing.T) {
 
 func TestReaderReportsParseErrorsAndCancellation(t *testing.T) {
 	t.Parallel()
+
 	for name, files := range map[string]map[string]string{
 		"module":         {"go.mod": "module sample\n\ngo 1.26\n", "options.go": "package sample\ntype options struct {"},
 		"outside module": {"options.go": "package sample\ntype options struct {"},
@@ -84,6 +91,7 @@ func TestReaderReportsParseErrorsAndCancellation(t *testing.T) {
 		for file, src := range files {
 			require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(src), 0o600))
 		}
+
 		_, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
 		require.ErrorContains(t, err, "failed to parse directory", name)
 	}
@@ -94,12 +102,14 @@ func TestReaderReportsParseErrorsAndCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	_, err = (source.Reader{}).Parse(ctx, empty, "options", false)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestReaderLeavesTypeParametersUnresolved(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	for name, src := range map[string]string{
 		"go.mod":     "module sample\n\ngo 1.26\n",
@@ -107,12 +117,15 @@ func TestReaderLeavesTypeParametersUnresolved(t *testing.T) {
 	} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600))
 	}
+
 	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
 	require.NoError(t, err)
+
 	byName := make(map[string]model.OptField)
 	for _, f := range packages[0].Fields {
 		byName[f.FieldName] = f
 	}
+
 	require.False(t, byName["v"].TypeResolved, "type parameters depend on the instantiation")
 	require.False(t, byName["bad"].TypeResolved, "undefined types stay unresolved")
 	require.True(t, byName["c"].TypeResolved)

@@ -17,6 +17,7 @@ func Register(registry *plugin.Registry) error {
 	if err := registry.Register(NewCollapse()); err != nil {
 		return err
 	}
+
 	return registry.Register(NewHostPort())
 }
 
@@ -57,6 +58,7 @@ func (*HostPort) Validate(field model.OptField, _ string) error {
 	if plugin.ValueKindOf(field) != plugin.ValueString {
 		return fmt.Errorf("%w %s (supported: string)", plugin.ErrNotApplicable, field.Type)
 	}
+
 	return nil
 }
 
@@ -65,17 +67,22 @@ func (*HostPort) Validate(field model.OptField, _ string) error {
 // panic by default, or keeping the previous value with --check-failure skip.
 func (*HostPort) Generate(ctx plugin.GenerationContext, field model.OptField, valueVar, _ string) []string {
 	ctx.AddImport("net")
+
 	var fail string
+
 	switch {
 	case ctx.OptionReturnsError:
 		ctx.AddImport("fmt")
+
 		fail = fmt.Sprintf("return fmt.Errorf(%q, err)", field.FieldName+": %w")
 	case ctx.CheckFailure == model.CheckFailureSkip:
 		fail = "return"
 	default:
 		ctx.AddImport("fmt")
+
 		fail = fmt.Sprintf("panic(fmt.Errorf(%q, err))", field.FieldName+": %w")
 	}
+
 	return []string{
 		"if _, _, err := net.SplitHostPort(" + valueVar + "); err != nil {",
 		"  " + fail,

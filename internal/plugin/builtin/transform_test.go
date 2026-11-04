@@ -14,6 +14,7 @@ import (
 
 func TestHasModifier(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name      string
 		modifiers []string
@@ -49,6 +50,7 @@ func TestHasModifier(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			result := plugin.HasModifier(tt.modifiers, tt.modifier)
 			require.Equal(t, tt.expected, result)
 		})

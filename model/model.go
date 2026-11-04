@@ -45,6 +45,7 @@ func (f OptField) HasModifier(modifier string) bool {
 	if !f.HasModifiers {
 		return false
 	}
+
 	return slices.ContainsFunc(f.Modifiers, func(m string) bool {
 		return strings.EqualFold(m, modifier)
 	})
@@ -90,17 +91,22 @@ func (g GenericInfo) TypeParamsDecl() string {
 	if !g.IsGeneric() {
 		return ""
 	}
+
 	var b strings.Builder
 	b.WriteByte('[')
+
 	for i, tp := range g.TypeParams {
 		if i > 0 {
 			b.WriteString(", ")
 		}
+
 		b.WriteString(tp.Name)
 		b.WriteByte(' ')
 		b.WriteString(tp.Constraint)
 	}
+
 	b.WriteByte(']')
+
 	return b.String()
 }
 
@@ -110,14 +116,19 @@ func (g GenericInfo) TypeParamsNames() string {
 	if !g.IsGeneric() {
 		return ""
 	}
+
 	var b strings.Builder
 	b.WriteByte('[')
+
 	for i, tp := range g.TypeParams {
 		if i > 0 {
 			b.WriteString(", ")
 		}
+
 		b.WriteString(tp.Name)
 	}
+
 	b.WriteByte(']')
+
 	return b.String()
 }

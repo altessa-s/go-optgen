@@ -47,6 +47,7 @@ func (double) Generate(_ plugin.GenerationContext, _ model.OptField, in string) 
 
 func TestGeneratedPipelineCompilesAndUsesTransformedValue(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 	require.NoError(t, builtin.Register(r))
 	require.NoError(t, r.Register(increment{}, double{}))
@@ -71,6 +72,7 @@ func TestGeneratedPipelineCompilesAndUsesTransformedValue(t *testing.T) {
 
 func TestAllFieldHandlersUsePipeline(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		name, typ, elem, input string
 		isSlice                bool
@@ -96,40 +98,51 @@ func TestAllFieldHandlersUsePipeline(t *testing.T) {
 		for _, returnsError := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/returns_error=%t", tc.name, returnsError), func(t *testing.T) {
 				t.Parallel()
+
 				r := plugin.NewRegistry()
 				require.NoError(t, builtin.Register(r))
 				require.NoError(t, r.Register(copyValue{}, terminal{}))
+
 				settings := tc.settings
 				settings.TypeName, settings.OptionType, settings.GenerateOptionType = "options", "Option", true
 				settings.OptionReturnsError = returnsError
 				field := model.OptField{FieldName: "value", OptionName: "Value", Type: tc.typ, ElemType: tc.elem, IsSlice: tc.isSlice,
 					Metadata: tc.metadata, Mandatory: tc.mandatory, Modifiers: append(slices.Clone(tc.mods), "copyvalue"), HasModifiers: true}
+
 				source := "package sample\n"
 				if tc.name == "ip" {
 					source += "import \"net\"\n"
 				}
+
 				source += "type options struct{value " + tc.input + "}"
 				fset := token.NewFileSet()
 				in, err := parser.ParseFile(fset, "options.go", source, 0)
 				require.NoError(t, err)
+
 				typeCheck := func(name string, field model.OptField) string {
 					t.Helper()
+
 					content, err := generator.New(r, plugin.NewPipeline(r)).Generate(model.GenerateInput{PackageName: "sample",
 						RenderSettings: settings, Fields: []model.OptField{field}})
 					require.NoError(t, err)
 					out, err := parser.ParseFile(fset, name, content, 0)
 					require.NoError(t, err)
+
 					config := types.Config{Importer: importer.Default()}
 					_, err = config.Check("sample", fset, []*ast.File{in, out}, nil)
 					require.NoError(t, err, "%s", content)
+
 					return string(content)
 				}
+
 				content := typeCheck("options_gen.go", field)
 				if tc.skipped {
 					require.NotContains(t, content, "o.value =", "skipped handlers must not assign the field")
 					require.NotContains(t, content, "copied :=")
+
 					return
 				}
+
 				require.Contains(t, content, "copied :=")
 				require.Regexp(t, `o\.value = .*copied`, content, "the field is assigned from the pipeline output")
 
@@ -161,5 +174,6 @@ func (terminal) Generate(ctx plugin.GenerationContext, _ model.OptField, _ strin
 	if ctx.OptionReturnsError {
 		return plugin.ModifierResult{Code: []string{"return nil"}, Final: true}
 	}
+
 	return plugin.ModifierResult{Code: []string{"return"}, Final: true}
 }

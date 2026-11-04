@@ -17,6 +17,7 @@ func readConfigFile(path string) (*optconfig.File, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return optconfig.Parse(data)
 }
 
@@ -36,17 +37,21 @@ func findConfigFile(startDir string) (configPath, projectRoot string) {
 
 	// Locate the repository boundary before deciding whether to cross go.mod.
 	boundary := ""
+
 	for dir := start; ; dir = filepath.Dir(dir) {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil && projectRoot == "" {
 			projectRoot = dir
 		}
+
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			boundary = dir
 			if projectRoot == "" {
 				projectRoot = dir
 			}
+
 			break
 		}
+
 		if filepath.Dir(dir) == dir {
 			boundary = projectRoot
 			break
@@ -58,6 +63,7 @@ func findConfigFile(startDir string) (configPath, projectRoot string) {
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, dir
 		}
+
 		if dir == boundary || filepath.Dir(dir) == dir {
 			return "", projectRoot
 		}

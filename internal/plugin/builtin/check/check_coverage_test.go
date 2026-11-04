@@ -24,6 +24,7 @@ func importPaths(ctx plugin.GenerationContext) []string {
 	for _, imp := range ctx.GetAdditionalImports() {
 		out = append(out, imp.Path)
 	}
+
 	return out
 }
 
@@ -62,6 +63,7 @@ func TestRequiredCheck(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			c := &check.RequiredCheck{}
 			require.NoError(t, c.Validate(tc.field, ""))
 			ctx := newCtx(tc.returnsErr)
@@ -84,27 +86,32 @@ func TestLenChecks(t *testing.T) {
 
 	t.Run("minlen string", func(t *testing.T) {
 		t.Parallel()
+
 		got := (&check.MinLenCheck{}).Generate(newCtx(true), str, "v", "2")
 		require.Equal(t, []string{"if len(v) < (2) {", `  return fmt.Errorf("tags is too short (min 2)")`, "}"}, got)
 	})
 	t.Run("minlen slice", func(t *testing.T) {
 		t.Parallel()
+
 		got := (&check.MinLenCheck{}).Generate(newCtx(false), slice, "v", " 3 ")
 		require.Equal(t, "if len(v) < (3) {", got[0])
 		require.Equal(t, `  panic(fmt.Errorf("tags has too few elements (min 3)"))`, got[1])
 	})
 	t.Run("maxlen string", func(t *testing.T) {
 		t.Parallel()
+
 		got := (&check.MaxLenCheck{}).Generate(newCtx(true), str, "x", "5")
 		require.Equal(t, []string{"if len(x) > (5) {", `  return fmt.Errorf("tags is too long (max 5)")`, "}"}, got)
 	})
 	t.Run("maxlen map", func(t *testing.T) {
 		t.Parallel()
+
 		got := (&check.MaxLenCheck{}).Generate(newCtx(true), mp, "x", "5")
 		require.Equal(t, `  return fmt.Errorf("tags has too many elements (max 5)")`, got[1])
 	})
 	t.Run("supported kinds validate", func(t *testing.T) {
 		t.Parallel()
+
 		for _, f := range []model.OptField{str, slice, mp} {
 			require.NoError(t, (&check.MinLenCheck{}).Validate(f, "1"))
 			require.NoError(t, (&check.MaxLenCheck{}).Validate(f, "1"))
@@ -147,6 +154,7 @@ func TestNonZeroCheck(t *testing.T) {
 	for _, typ := range []string{"int", "uint64", "float32", "time.Duration", "uintptr"} {
 		t.Run(typ, func(t *testing.T) {
 			t.Parallel()
+
 			field := model.OptField{FieldName: "n", Type: typ}
 			require.NoError(t, (&check.NonZeroCheck{}).Validate(field, ""))
 			got := (&check.NonZeroCheck{}).Generate(newCtx(false), field, "v", "")
@@ -173,11 +181,13 @@ func testRegistry() *plugin.Registry {
 	if err := check.Register(r); err != nil {
 		panic(err)
 	}
+
 	return r
 }
 
 func TestCheckFailureSkipMode(t *testing.T) {
 	t.Parallel()
+
 	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{CheckFailure: model.CheckFailureSkip}, nil, nil, model.GenericInfo{})
 	got := (&check.RequiredCheck{}).Generate(ctx, model.OptField{FieldName: "name", Type: "string"}, "v", "")
 	require.Equal(t, []string{`if v == "" {`, "  return", "}"}, got)

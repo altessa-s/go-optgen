@@ -18,7 +18,9 @@ func BenchmarkBuildPipeline(b *testing.B) {
 	}}); err != nil {
 		b.Fatal(err)
 	}
+
 	field := model.OptField{Modifiers: []string{"audit"}}
+
 	pipeline := plugin.NewPipeline(r)
 	for b.Loop() {
 		pipeline.BuildPipeline(plugin.GenerationContext{}, field, "v")

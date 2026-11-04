@@ -35,9 +35,11 @@ func New(use, short string, opts ...Option) *cobra.Command {
 	}
 
 	root.configure(cfg.subcommands)
+
 	if cfg.out != nil {
 		root.SetOut(cfg.out)
 	}
+
 	if cfg.err != nil {
 		root.SetErr(cfg.err)
 	}
@@ -81,6 +83,7 @@ func (c *Command) preRunWithRecovery(cmd *cobra.Command, args []string) (err err
 			err = fmt.Errorf("panic recovered: %v", r)
 		}
 	}()
+
 	return c.preRun(cmd, args)
 }
 
@@ -120,8 +123,10 @@ func Version() string {
 	if version != "" {
 		return version
 	}
+
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
 	}
+
 	return "devel"
 }

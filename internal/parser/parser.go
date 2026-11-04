@@ -49,11 +49,13 @@ func isVersionSegment(s string) bool {
 	if len(s) < 2 || s[0] != 'v' {
 		return false
 	}
+
 	for _, c := range s[1:] {
 		if c < '0' || c > '9' {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -85,7 +87,9 @@ func FindOptFields(pkg *ast.Package, typeName string, processAllFields bool, typ
 		Fields:  []model.OptField{},
 		Imports: make(map[string]model.ImportInfo),
 	}
+
 	var parseErr error
+
 	var declaredIn []string // files declaring typeName, in order
 
 	fileNames := slices.Sorted(maps.Keys(pkg.Files))
@@ -123,11 +127,13 @@ func FindOptFields(pkg *ast.Package, typeName string, processAllFields bool, typ
 					result.IsSetField = field.Names[0].Name
 					continue
 				}
+
 				optFields, err := processStructField(field, processAllFields, result.Imports, types)
 				if err != nil {
 					parseErr = err
 					return false
 				}
+
 				result.Fields = append(result.Fields, optFields...)
 			}
 
@@ -167,9 +173,11 @@ func collectFileImports(file *ast.File, imports map[string]model.ImportInfo) {
 		if alias != "" && alias != "_" && alias != "." {
 			key = alias
 		}
+
 		if alias == "_" {
 			alias = "" // Convert blank import to regular import in generated code
 		}
+
 		imports[key] = model.ImportInfo{Path: path, Alias: alias}
 	}
 }
@@ -238,6 +246,7 @@ func shouldProcessField(ctx fieldProcessingContext, processAllFields bool) bool 
 	default:
 		_, hasOptval := LookupTag(ctx.tagStr, "optval")
 		_, hasOptcheck := LookupTag(ctx.tagStr, "optcheck")
+
 		return ctx.hasOptgen || hasOptval || hasOptcheck
 	}
 }
@@ -252,6 +261,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	// Only a slice gets the slice setters; a fixed-size array is a scalar.
 	arrType, isSlice := field.Type.(*ast.ArrayType)
 	isSlice = isSlice && arrType.Len == nil
+
 	elemType := ""
 	if isSlice {
 		elemType = TypeToString(arrType.Elt)
@@ -263,12 +273,16 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	isInterface := IsInterfaceType(field.Type)
 	isNilable := IsNilableType(field.Type)
 	typeImports := ExtractImportsFromType(field.Type, imports)
-	var facts, elemFacts TypeFacts
-	var resolved, elemResolved bool
+
+	var (
+		facts, elemFacts       TypeFacts
+		resolved, elemResolved bool
+	)
 	if types != nil {
 		if facts, resolved = types.TypeFacts(field.Type); resolved {
 			isInterface, isNilable = facts.Interface, facts.Nilable
 		}
+
 		if isSlice {
 			elemFacts, elemResolved = types.TypeFacts(arrType.Elt)
 		}
@@ -277,10 +291,12 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	out := make([]model.OptField, 0, len(field.Names))
 	for _, ident := range field.Names {
 		fieldName := ident.Name
+
 		optName := explicitOptName
 		if optName == "" || len(field.Names) > 1 {
 			optName = naming.OptionName(fieldName)
 		}
+
 		out = append(out, model.OptField{
 			FieldName:    fieldName,
 			OptionName:   optName,
@@ -304,6 +320,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			ElemComparable: elemResolved && elemFacts.Comparable,
 		})
 	}
+
 	return out, nil
 }
 
@@ -312,9 +329,11 @@ func extractFieldDoc(field *ast.Field) string {
 	if field.Doc != nil {
 		return strings.TrimSpace(field.Doc.Text())
 	}
+
 	if field.Comment != nil {
 		return strings.TrimSpace(field.Comment.Text())
 	}
+
 	return ""
 }
 
@@ -324,6 +343,7 @@ func sortOptFields(fields []model.OptField) {
 		if a.OptionName != b.OptionName {
 			return strings.Compare(a.OptionName, b.OptionName)
 		}
+
 		return strings.Compare(a.FieldName, b.FieldName)
 	})
 }
@@ -356,10 +376,12 @@ func FindNormalizationMethod(pkg *ast.Package, typeName string) (string, error) 
 				if funcDecl.Type.TypeParams != nil {
 					return "", fmt.Errorf("%s.%s: %w", typeName, methodName, ErrGenericNormalization)
 				}
+
 				return methodName, nil
 			}
 		}
 	}
+
 	return "", nil
 }
 
@@ -367,6 +389,7 @@ func receiverTypeName(expr ast.Expr) string {
 	if star, ok := expr.(*ast.StarExpr); ok {
 		expr = star.X
 	}
+
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name
@@ -379,5 +402,6 @@ func receiverTypeName(expr ast.Expr) string {
 			return ident.Name
 		}
 	}
+
 	return ""
 }

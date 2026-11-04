@@ -25,11 +25,14 @@ func buildFail(ctx plugin.GenerationContext, msg string) string {
 	if !ctx.OptionReturnsError && ctx.CheckFailure == model.CheckFailureSkip {
 		return "return"
 	}
+
 	ctx.AddImport("fmt")
+
 	errExpr := fmt.Sprintf(`fmt.Errorf(%q)`, msg)
 	if ctx.OptionReturnsError {
 		return "return " + errExpr
 	}
+
 	return "panic(" + errExpr + ")"
 }
 
@@ -44,6 +47,7 @@ func canBeNil(field model.OptField) bool {
 	if field.TypeResolved {
 		return field.IsNilable
 	}
+
 	return !slices.Contains(valueTypes(), field.Type) && !strings.HasPrefix(field.Type, "[") && !strings.HasPrefix(field.Type, "struct")
 }
 
@@ -66,6 +70,7 @@ func buildLenBoundCheck(
 	collectionMsgFmt string,
 ) []string {
 	limit := strings.TrimSpace(rawValue)
+
 	msg := fmt.Sprintf(stringMsgFmt, field.FieldName, limit)
 	if plugin.ValueKindOf(field) != plugin.ValueString {
 		msg = fmt.Sprintf(collectionMsgFmt, field.FieldName, limit)

@@ -27,6 +27,7 @@ func extractModifierKey(mod string) string {
 	if idx := strings.IndexByte(mod, '='); idx > 0 {
 		return mod[:idx]
 	}
+
 	return mod
 }
 
@@ -90,11 +91,13 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 func (r *Registry) Register(plugins ...any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	for _, p := range plugins {
 		if err := r.registerLocked(p); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -107,10 +110,12 @@ func (r *Registry) registerLocked(p any) error {
 	if !ok {
 		return fmt.Errorf("%w %T", ErrUnsupportedPlugin, p)
 	}
+
 	field, isField := p.(FieldPlugin)
 	transform, isTransform := p.(TransformPlugin)
 	modifier, isModifier := p.(ModifierPlugin)
 	typeDefault, isTypeDefault := p.(TypeDefaultPlugin)
+
 	check, isCheck := p.(CheckPlugin)
 	switch contracts := countTrue(isField, isTransform, isModifier, isTypeDefault, isCheck); {
 	case contracts == 0:
@@ -118,10 +123,12 @@ func (r *Registry) registerLocked(p any) error {
 	case contracts > 1:
 		return fmt.Errorf("%w: %T", ErrAmbiguousPlugin, p)
 	}
+
 	name := normalizeKey(GetPluginName(meta))
 	if r.names[name] {
 		return fmt.Errorf("%w %q", ErrDuplicateName, GetPluginName(meta))
 	}
+
 	switch {
 	case isField:
 		r.fieldPlugins = append(r.fieldPlugins, field)
@@ -134,29 +141,35 @@ func (r *Registry) registerLocked(p any) error {
 		if err != nil {
 			return err
 		}
+
 		r.transformPlugins[key] = transform
 	case isModifier:
 		key, err := r.claimValueKey(modifier.Key(), p)
 		if err != nil {
 			return err
 		}
+
 		r.modifierPlugins[key] = modifier
 	case isCheck:
 		if err := r.registerCheckLocked(check); err != nil {
 			return err
 		}
 	}
+
 	r.names[name] = true
+
 	return nil
 }
 
 func countTrue(values ...bool) int {
 	n := 0
+
 	for _, v := range values {
 		if v {
 			n++
 		}
 	}
+
 	return n
 }
 
@@ -165,6 +178,7 @@ func sortByPriority[T PluginMeta](plugins []T) {
 		if c := cmp.Compare(b.Meta().Priority, a.Meta().Priority); c != 0 {
 			return c // higher priority first
 		}
+
 		return cmp.Compare(GetPluginName(a), GetPluginName(b))
 	})
 }
@@ -175,38 +189,46 @@ func (r *Registry) claimValueKey(raw string, p any) (string, error) {
 	if key == "" {
 		return "", fmt.Errorf("%w: %T has an empty key", ErrUnsupportedPlugin, p)
 	}
+
 	if owner, ok := r.transformPlugins[key]; ok {
 		return "", fmt.Errorf("%w %q: %T conflicts with %s", ErrDuplicateKey, key, p, GetPluginName(owner))
 	}
+
 	if owner, ok := r.modifierPlugins[key]; ok {
 		return "", fmt.Errorf("%w %q: %T conflicts with %s", ErrDuplicateKey, key, p, GetPluginName(owner))
 	}
+
 	return key, nil
 }
 
 func (r *Registry) registerCheckLocked(h CheckPlugin) error {
 	spec := h.Spec()
+
 	spec.Key = normalizeKey(spec.Key)
 	if spec.Key == "" {
 		return fmt.Errorf("%w: %T has an empty key", ErrUnsupportedPlugin, h)
 	}
+
 	keys := []string{spec.Key}
 	for _, a := range h.Aliases() {
 		if a = normalizeKey(a); a != "" && !slices.Contains(keys, a) {
 			keys = append(keys, a)
 		}
 	}
+
 	for _, key := range keys {
 		if owner, ok := r.checkPlugins[key]; ok {
 			return fmt.Errorf("%w %q: %T conflicts with %s", ErrDuplicateKey, key, h, GetPluginName(owner))
 		}
 	}
+
 	for _, key := range keys {
 		keySpec := spec
 		keySpec.Key = key
 		r.checkSpecs[key] = keySpec
 		r.checkPlugins[key] = h
 	}
+
 	return nil
 }
 
@@ -216,30 +238,38 @@ func (r *Registry) registerCheckLocked(h CheckPlugin) error {
 func (r *Registry) DisablePlugins(names ...string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	keys := make([]string, 0, len(names))
 	for _, name := range names {
 		key := normalizeKey(name)
 		if key == "" {
 			continue
 		}
+
 		if !r.names[key] {
 			return fmt.Errorf("%w %q (known: %s)", ErrUnknownPlugin, strings.TrimSpace(name), strings.Join(r.namesLocked(), ", "))
 		}
+
 		keys = append(keys, key)
 	}
+
 	for _, key := range keys {
 		r.disabledPlugins[key] = true
 	}
+
 	return nil
 }
 
 func (r *Registry) namesLocked() []string {
 	descriptors := r.descriptorsLocked()
+
 	out := make([]string, 0, len(descriptors))
 	for _, d := range descriptors {
 		out = append(out, d.Name)
 	}
+
 	slices.Sort(out)
+
 	return slices.Compact(out)
 }
 
@@ -254,6 +284,7 @@ func (r *Registry) warn(messages []string) {
 	if r.options.warningSink == nil {
 		return
 	}
+
 	for _, msg := range messages {
 		r.options.warningSink(msg)
 	}
@@ -267,6 +298,7 @@ func (r *Registry) warn(messages []string) {
 func (r *Registry) FindPlugin(field model.OptField) (FieldPlugin, error) {
 	var warnings []string
 	defer func() { r.warn(warnings) }()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -274,6 +306,7 @@ func (r *Registry) FindPlugin(field model.OptField) (FieldPlugin, error) {
 		if r.isPluginDisabledLocked(p) {
 			continue
 		}
+
 		match := p.CanHandle(field)
 
 		// If the plugin declares applicable types and this field type is not allowed,
@@ -283,12 +316,15 @@ func (r *Registry) FindPlugin(field model.OptField) (FieldPlugin, error) {
 				warnings = append(warnings, fmt.Sprintf("field plugin %s ignored for field %s (type %s): applicable types: %s",
 					GetPluginName(p), field.FieldName, field.Type, strings.Join(allowed, ", ")))
 			}
+
 			continue
 		}
+
 		if match {
 			return p, nil
 		}
 	}
+
 	return nil, fmt.Errorf("no plugin found for field %s (type: %s)", field.FieldName, field.Type)
 }
 
@@ -306,6 +342,7 @@ func (r *Registry) FindTransformPlugin(key, typeStr string) (TransformPlugin, bo
 
 	var warnings []string
 	defer func() { r.warn(warnings) }()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -313,10 +350,12 @@ func (r *Registry) FindTransformPlugin(key, typeStr string) (TransformPlugin, bo
 	if !ok || r.isPluginDisabledLocked(p) {
 		return nil, false
 	}
+
 	if allowed := p.Meta().ApplicableTypes; len(allowed) > 0 && typeStr != "" && !MatchesType(typeStr, allowed) {
 		warnings = append(warnings, fmt.Sprintf("transform %s ignored for type %s: applicable types: %s", k, typeStr, strings.Join(allowed, ", ")))
 		return nil, false
 	}
+
 	return p, true
 }
 
@@ -329,6 +368,7 @@ func (r *Registry) FindTransformPlugin(key, typeStr string) (TransformPlugin, bo
 func (r *Registry) CollectModifiers(field model.OptField) []ModifierPlugin {
 	var warnings []string
 	defer func() { r.warn(warnings) }()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -341,17 +381,22 @@ func (r *Registry) CollectModifiers(field model.OptField) []ModifierPlugin {
 		if k == "" || seen[k] {
 			return
 		}
+
 		p := r.modifierPlugins[k]
 		if p == nil || r.isPluginDisabledLocked(p) {
 			return
 		}
+
 		if allowed := p.Meta().ApplicableTypes; len(allowed) > 0 && !modifierTypeAllowed(field, allowed) {
 			warnings = append(warnings, fmt.Sprintf("modifier %s ignored for field %s (type %s): applicable types: %s",
 				k, field.FieldName, field.Type, strings.Join(allowed, ", ")))
+
 			return
 		}
+
 		if p.CanHandle(field) {
 			seen[k] = true
+
 			modifiers = append(modifiers, p)
 		}
 	}
@@ -359,6 +404,7 @@ func (r *Registry) CollectModifiers(field model.OptField) []ModifierPlugin {
 	for _, key := range slices.Sorted(maps.Keys(field.Metadata)) {
 		tryAdd(key)
 	}
+
 	for _, mod := range field.Modifiers {
 		tryAdd(extractModifierKey(mod))
 	}
@@ -367,6 +413,7 @@ func (r *Registry) CollectModifiers(field model.OptField) []ModifierPlugin {
 	slices.SortStableFunc(modifiers, func(a, b ModifierPlugin) int {
 		return cmp.Compare(a.Phase(), b.Phase())
 	})
+
 	return modifiers
 }
 
@@ -379,15 +426,19 @@ func modifierTypeAllowed(field model.OptField, allowed []string) bool {
 // [ErrPluginDisabled] when the providing plugin is disabled.
 func (r *Registry) FindCheckPlugin(key string) (CheckPlugin, CheckSpec, error) {
 	k := normalizeKey(key)
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	h, ok := r.checkPlugins[k]
 	if !ok {
 		return nil, CheckSpec{}, fmt.Errorf("%w %q", ErrUnknownCheck, key)
 	}
+
 	if r.isPluginDisabledLocked(h) {
 		return nil, CheckSpec{}, fmt.Errorf("optcheck %q: %w: %s", key, ErrPluginDisabled, GetPluginName(h))
 	}
+
 	return h, r.checkSpecs[k], nil
 }
 
@@ -404,10 +455,12 @@ func (r *Registry) FindTypeDefaultPlugin(typeStr string) string {
 		if r.isPluginDisabledLocked(p) {
 			continue
 		}
+
 		if p.CanProvideDefault(typeStr) {
 			return p.GetDefault(typeStr)
 		}
 	}
+
 	return ""
 }
 
@@ -423,10 +476,12 @@ func (r *Registry) NormalizeDefault(typeStr, def string) string {
 		if !ok || r.isPluginDisabledLocked(p) {
 			continue
 		}
+
 		if out, ok := n.NormalizeDefault(typeStr, def); ok {
 			return out
 		}
 	}
+
 	return def
 }
 
@@ -436,43 +491,54 @@ func (r *Registry) NormalizeDefault(typeStr, def string) string {
 func (r *Registry) Descriptors() []Descriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.descriptorsLocked()
 }
 
 func (r *Registry) descriptorsLocked() []Descriptor {
 	var out []Descriptor
+
 	add := func(kind Kind, key string, phase Phase, p PluginMeta) {
 		out = append(out, Descriptor{Name: GetPluginName(p), Kind: kind, Key: key, Phase: phase, Meta: p.Meta(), Disabled: r.isPluginDisabledLocked(p)})
 	}
 	for _, p := range r.fieldPlugins {
 		add(KindField, "", 0, p)
 	}
+
 	for _, p := range r.typeDefaultPlugins {
 		add(KindTypeDefault, "", 0, p)
 	}
+
 	for key, p := range r.transformPlugins {
 		add(KindTransform, key, PhaseTransform, p)
 	}
+
 	for key, p := range r.modifierPlugins {
 		add(KindModifier, key, p.Phase(), p)
 	}
+
 	for key, p := range r.checkPlugins {
 		if normalizeKey(p.Spec().Key) != key {
 			continue // aliases are reported with their primary key
 		}
+
 		add(KindOptCheck, key, PhaseCheck, p)
+
 		for _, a := range p.Aliases() {
 			if a = normalizeKey(a); a != "" && a != key {
 				out[len(out)-1].Aliases = append(out[len(out)-1].Aliases, a)
 			}
 		}
 	}
+
 	order := []Kind{KindField, KindTypeDefault, KindTransform, KindModifier, KindOptCheck}
+
 	slices.SortFunc(out, func(a, b Descriptor) int {
 		priority := cmp.Compare(b.Meta.Priority, a.Meta.Priority)
 		if a.Kind == KindOptCheck {
 			priority = -priority // checks run in ascending priority
 		}
+
 		return cmp.Or(
 			cmp.Compare(slices.Index(order, a.Kind), slices.Index(order, b.Kind)),
 			cmp.Compare(a.Phase, b.Phase),
@@ -481,6 +547,7 @@ func (r *Registry) descriptorsLocked() []Descriptor {
 			cmp.Compare(a.Key, b.Key),
 		)
 	})
+
 	return out
 }
 
@@ -497,5 +564,6 @@ func MatchesType(typeStr string, patterns []string) bool {
 			return true
 		}
 	}
+
 	return false
 }

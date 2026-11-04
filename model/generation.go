@@ -118,16 +118,19 @@ func (s RenderSettings) Verify() error {
 	default:
 		return fmt.Errorf("%w: string setter %q (want %s or %s)", ErrInvalidSettings, s.StringSetter, StringSetterGeneric, StringSetterPlain)
 	}
+
 	switch s.CheckFailure {
 	case "", CheckFailurePanic, CheckFailureSkip:
 	default:
 		return fmt.Errorf("%w: check failure mode %q (want %s or %s)", ErrInvalidSettings, s.CheckFailure, CheckFailurePanic, CheckFailureSkip)
 	}
+
 	switch s.SliceSetter {
 	case "", SliceSetterVariadic, SliceSetterSlice:
 	default:
 		return fmt.Errorf("%w: slice setter %q (want %s or %s)", ErrInvalidSettings, s.SliceSetter, SliceSetterVariadic, SliceSetterSlice)
 	}
+
 	switch s.DefaultsFrom {
 	case "", DefaultsFromTags, DefaultsFromNone:
 		if s.DefaultsName != "" {
@@ -141,6 +144,7 @@ func (s RenderSettings) Verify() error {
 		return fmt.Errorf("%w: defaults source %q (want %s, %s, %s or %s)", ErrInvalidSettings, s.DefaultsFrom,
 			DefaultsFromTags, DefaultsFromVar, DefaultsFromFunc, DefaultsFromNone)
 	}
+
 	return nil
 }
 

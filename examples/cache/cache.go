@@ -25,6 +25,7 @@ func New[K comparable, V any](opts ...Option[K, V]) *Cache[K, V] {
 	if o.loader != nil && !o.isSet(optionsFieldCapacity) {
 		o.capacity = LoaderCapacity
 	}
+
 	return &Cache[K, V]{opts: o, entries: make(map[K]V)}
 }
 
@@ -37,8 +38,10 @@ func (c *Cache[K, V]) Put(k K, v V) {
 		if len(c.order) == c.opts.capacity {
 			c.evict()
 		}
+
 		c.order = append(c.order, k)
 	}
+
 	c.entries[k] = v
 }
 
@@ -48,15 +51,19 @@ func (c *Cache[K, V]) Get(k K) (V, bool, error) {
 	if v, ok := c.entries[k]; ok {
 		return v, true, nil
 	}
+
 	var zero V
 	if c.opts.loader == nil {
 		return zero, false, nil
 	}
+
 	v, err := c.opts.loader(k)
 	if err != nil {
 		return zero, false, err
 	}
+
 	c.Put(k, v)
+
 	return v, true, nil
 }
 
@@ -65,6 +72,7 @@ func (c *Cache[K, V]) evict() {
 	c.order = slices.Delete(c.order, 0, 1)
 	v := c.entries[oldest]
 	delete(c.entries, oldest)
+
 	if c.opts.onEvict != nil {
 		c.opts.onEvict(oldest, v)
 	}

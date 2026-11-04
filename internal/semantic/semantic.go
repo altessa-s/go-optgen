@@ -44,31 +44,39 @@ func New(catalog Catalog, opts ...Option) *Preparer {
 // warning, and type defaults and default modifiers are resolved.
 func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 	out := slices.DeleteFunc(slices.Clone(fields), p.excluded)
+
 	policy := newModifierPolicy(p.catalog.Descriptors())
 	if !p.options.defaultModifiers {
 		policy.defaults = nil
 	}
+
 	for i := range out {
 		f := &out[i]
 		if first, _ := utf8.DecodeRuneInString(f.FieldName); unicode.IsUpper(first) {
 			p.warn(fmt.Sprintf("field %s is exported; keep option fields unexported so callers configure through options", f.FieldName))
 		}
+
 		f.OptionName = p.options.prefix + f.OptionName
+
 		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
 		if !f.DefaultOnly && f.OptionName != "" && !token.IsIdentifier(f.OptionName) {
 			return nil, fmt.Errorf("field %s: invalid option name %q", f.FieldName, f.OptionName)
 		}
+
 		if err := p.prepareChecks(f); err != nil {
 			return nil, err
 		}
+
 		if f.Default == "" {
 			f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
 		} else {
 			f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
 		}
+
 		f.Modifiers = policy.modifiers(*f)
 		f.HasModifiers = len(f.Modifiers) > 0
 	}
+
 	return out, nil
 }
 
@@ -83,20 +91,25 @@ func (p *Preparer) PrepareInput(in model.GenerateInput) (model.GenerateInput, er
 	if err != nil {
 		return model.GenerateInput{}, err
 	}
+
 	if in.DefaultsFrom == model.DefaultsFromNone {
 		for i := range fields {
 			fields[i].Default = ""
 		}
 	}
+
 	if in.WithIsSet {
 		if in.IsSetField == "" {
 			return model.GenerateInput{}, fmt.Errorf("with-isset: declare a field of type %sFieldSet in %s", in.TypeName, in.TypeName)
 		}
+
 		if len(fields) > maxIsSetFields {
 			return model.GenerateInput{}, fmt.Errorf("with-isset: %s has %d fields, at most %d are supported", in.TypeName, len(fields), maxIsSetFields)
 		}
 	}
+
 	in.Fields = fields
+
 	return in, nil
 }
 
@@ -106,26 +119,33 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 	if len(f.Checks) == 0 {
 		return nil
 	}
+
 	checks := maps.Clone(f.Checks)
 	for _, key := range slices.Sorted(maps.Keys(f.Checks)) {
 		check, spec, err := p.catalog.FindCheckPlugin(key)
 		if errors.Is(err, plugin.ErrPluginDisabled) {
 			p.warn(fmt.Sprintf("field %s: check skipped: %v", f.FieldName, err))
 			delete(checks, key)
+
 			continue
 		}
+
 		if err != nil {
 			return fmt.Errorf("field %s: %w", f.FieldName, err)
 		}
+
 		value := f.Checks[key]
 		if spec.RequiresValue && (f.BareChecks[key] || strings.TrimSpace(value) == "") {
 			return fmt.Errorf("field %s: optcheck %s requires a value", f.FieldName, key)
 		}
+
 		if err := check.Validate(*f, value); err != nil {
 			return fmt.Errorf("field %s: optcheck %s: %w", f.FieldName, key, err)
 		}
 	}
+
 	f.Checks = checks
+
 	return nil
 }
 
@@ -144,20 +164,25 @@ type modifierPolicy struct {
 
 func newModifierPolicy(descriptors []plugin.Descriptor) modifierPolicy {
 	var policy modifierPolicy
+
 	for _, d := range descriptors {
 		if d.Kind != plugin.KindTransform && d.Kind != plugin.KindModifier {
 			continue
 		}
+
 		if d.Meta.DisabledBy != "" && !slices.Contains(policy.disablers, d.Meta.DisabledBy) {
 			policy.disablers = append(policy.disablers, d.Meta.DisabledBy)
 		}
+
 		if !d.Disabled && len(d.Meta.DefaultForTypes) > 0 {
 			policy.defaults = append(policy.defaults, d)
 		}
 	}
+
 	slices.SortFunc(policy.defaults, func(a, b plugin.Descriptor) int {
 		return cmp.Or(cmp.Compare(b.Meta.Priority, a.Meta.Priority), cmp.Compare(a.Key, b.Key))
 	})
+
 	return policy
 }
 
@@ -168,22 +193,27 @@ func (p modifierPolicy) modifiers(f model.OptField) []string {
 	for key := range f.Metadata {
 		existing = append(existing, key)
 	}
+
 	var defaults []string
 	if f.IsSlice {
 		defaults = append(defaults, p.defaultsFor(f.ElemType, existing)...)
 	}
+
 	defaults = append(defaults, p.defaultsFor(f.Type, existing)...)
+
 	var mods []string
 	for _, mod := range defaults {
 		if !slices.Contains(p.disablers, mod) && !slices.Contains(mods, mod) {
 			mods = append(mods, mod)
 		}
 	}
+
 	for _, mod := range f.Modifiers {
 		if !slices.Contains(p.disablers, mod) {
 			mods = append(mods, mod)
 		}
 	}
+
 	return mods
 }
 
@@ -191,18 +221,23 @@ func (p modifierPolicy) modifiers(f model.OptField) []string {
 // excluding those already present in existing or disabled by a key in it.
 func (p modifierPolicy) defaultsFor(typeStr string, existing []string) []string {
 	var keys []string
+
 	for _, d := range p.defaults {
 		if !plugin.MatchesType(typeStr, d.Meta.DefaultForTypes) {
 			continue
 		}
+
 		if d.Meta.DisabledBy != "" && slices.Contains(existing, d.Meta.DisabledBy) {
 			continue
 		}
+
 		if slices.ContainsFunc(existing, func(mod string) bool { return modifierKey(mod) == d.Key }) {
 			continue
 		}
+
 		keys = append(keys, d.Key)
 	}
+
 	return keys
 }
 

@@ -32,11 +32,13 @@ func TestMustRendersOptionReturn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			tmpl := fieldtmpl.Must("t", `func set() {
 {{template "optionReturn" .}}
 }`)
 			out, err := fieldtmpl.Execute(tmpl, struct{ OptionReturnsError bool }{OptionReturnsError: tt.returnErr})
 			require.NoError(t, err)
+
 			if tt.want == "" {
 				require.NotContains(t, out.Code, "return nil")
 			} else {
@@ -82,6 +84,7 @@ func (s stubPipeline) BuildPipeline(plugin.GenerationContext, model.OptField, st
 
 func TestNewDataIndentsPipelineCode(t *testing.T) {
 	t.Parallel()
+
 	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option", OptionReturnsError: true}, nil, nil,
 		model.GenericInfo{TypeParams: []model.TypeParam{{Name: "T", Constraint: "any"}}})
 	field := model.OptField{FieldName: "name"}
@@ -111,9 +114,11 @@ func TestNewBaseDataDocComment(t *testing.T) {
 	}
 
 	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			data := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "name", Doc: tt.doc})
 			require.Equal(t, tt.want, data.DocComment)
 		})

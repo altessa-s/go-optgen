@@ -33,6 +33,7 @@ func TestNotNilModifierCanHandle(t *testing.T) {
 	t.Parallel()
 
 	m := &guard.NotNilModifier{}
+
 	tests := []struct {
 		name  string
 		field model.OptField
@@ -61,6 +62,7 @@ func TestNotNilModifierGenerate(t *testing.T) {
 
 	t.Run("slice uses len and default var", func(t *testing.T) {
 		t.Parallel()
+
 		res := m.Generate(newCtx(false), model.OptField{IsSlice: true}, "")
 		require.Equal(t, []string{"if len(v) == 0 {", "  return", "}"}, res.Code)
 		require.Equal(t, "v", res.OutputVar)
@@ -69,6 +71,7 @@ func TestNotNilModifierGenerate(t *testing.T) {
 
 	t.Run("pointer uses nil comparison", func(t *testing.T) {
 		t.Parallel()
+
 		ctx := newCtx(true)
 		res := m.Generate(ctx, model.OptField{Type: "*Foo", IsNilable: true}, "p")
 		require.Equal(t, []string{"if p == nil {", "  return nil", "}"}, res.Code)
@@ -77,6 +80,7 @@ func TestNotNilModifierGenerate(t *testing.T) {
 
 	t.Run("interface uses reflect nil check", func(t *testing.T) {
 		t.Parallel()
+
 		ctx := newCtx(false)
 		res := m.Generate(ctx, model.OptField{Type: "any", IsInterface: true, IsNilable: true}, "v")
 		require.Equal(t, plugin.BuildNilEarlyReturn(newCtx(false), "v"), res.Code)
@@ -85,6 +89,7 @@ func TestNotNilModifierGenerate(t *testing.T) {
 
 	t.Run("explicit notnil on named type uses reflect nil check", func(t *testing.T) {
 		t.Parallel()
+
 		field := model.OptField{Type: "metrics.Collector", Metadata: map[string]string{"notnil": ""}}
 		res := m.Generate(newCtx(true), field, "v")
 		require.Equal(t, "switch rv := reflect.ValueOf(v); rv.Kind() {", res.Code[0])
@@ -93,6 +98,7 @@ func TestNotNilModifierGenerate(t *testing.T) {
 
 	t.Run("explicit notnil on map stays nil comparison", func(t *testing.T) {
 		t.Parallel()
+
 		field := model.OptField{Type: "map[string]int", Metadata: map[string]string{"notnil": ""}}
 		res := m.Generate(newCtx(false), field, "v")
 		require.Equal(t, "if v == nil {", res.Code[0])

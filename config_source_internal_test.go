@@ -36,6 +36,7 @@ func TestReadConfigFile(t *testing.T) {
 
 func TestFindConfigFile(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name       string
 		files      []string
@@ -92,13 +93,16 @@ func TestFindConfigFile(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			root := t.TempDir()
 			for _, file := range tc.files {
 				writeConfigTestFile(t, filepath.Join(root, file), "")
 			}
+
 			if tc.gitDir {
 				require.NoError(t, os.MkdirAll(filepath.Join(root, "repo", ".git"), 0o750))
 			}
+
 			start := filepath.Join(root, "repo", "nested", "pkg")
 			require.NoError(t, os.MkdirAll(start, 0o750))
 
@@ -108,6 +112,7 @@ func TestFindConfigFile(t *testing.T) {
 			} else {
 				require.Equal(t, filepath.Join(root, tc.wantConfig), cfgPath)
 			}
+
 			require.Equal(t, filepath.Join(root, tc.wantRoot), projectRoot)
 		})
 	}

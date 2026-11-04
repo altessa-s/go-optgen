@@ -18,6 +18,7 @@ import (
 
 func TestPrepareValidatesWithoutImplicitRegistration(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		name, key, value          string
 		bare, register, wantError bool
@@ -30,10 +31,12 @@ func TestPrepareValidatesWithoutImplicitRegistration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			r := plugin.NewRegistry()
 			if tc.register {
 				require.NoError(t, builtin.Register(r))
 			}
+
 			_, err := semantic.New(r).Prepare([]model.OptField{{Type: "string", Checks: map[string]string{tc.key: tc.value}, BareChecks: map[string]bool{tc.key: tc.bare}}})
 			if tc.wantError {
 				require.Error(t, err)
@@ -65,6 +68,7 @@ func TestPrepareCopiesFieldsAndRespectsDisabledDefaults(t *testing.T) {
 // valid optcheck key: checks resolve through check plugins only.
 func TestOptcheckKeysDoNotResolveModifiers(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 	require.NoError(t, r.Register(checkModifier{}))
 	_, err := semantic.New(r).Prepare([]model.OptField{{Checks: map[string]string{"custom": "true"}}})
@@ -83,6 +87,7 @@ func (checkModifier) Generate(plugin.GenerationContext, model.OptField, string) 
 
 func TestPrepareRejectsInapplicableChecks(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		name    string
 		field   model.OptField
@@ -97,6 +102,7 @@ func TestPrepareRejectsInapplicableChecks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{tc.field})
 			if tc.wantErr == nil {
 				require.NoError(t, err)
@@ -111,7 +117,9 @@ func TestPrepareDropsDisabledChecksWithWarning(t *testing.T) {
 	t.Parallel()
 	r := builtinRegistry(t)
 	require.NoError(t, r.DisablePlugins("NonZeroCheck"))
+
 	var warnings []string
+
 	input := []model.OptField{{FieldName: "count", Type: "int", Checks: map[string]string{"nonzero": ""}}}
 	prepared, err := semantic.New(r, semantic.WithWarningSink(func(msg string) { warnings = append(warnings, msg) })).Prepare(input)
 	require.NoError(t, err)
@@ -150,11 +158,13 @@ func transformDescriptor(key string, priority int, disabledBy string, defaultFor
 
 func TestPrepareDefaultModifiers(t *testing.T) {
 	t.Parallel()
+
 	trim := transformDescriptor("trimspaces", 10, "notrim", "string")
 	lower := transformDescriptor("lower", 5, "", "string")
 	disabled := transformDescriptor("upper", 20, "", "string")
 	disabled.Disabled = true
 	field := plugin.Descriptor{Name: "F", Kind: plugin.KindField, Meta: plugin.Meta{DefaultForTypes: []string{"string"}}}
+
 	tests := []struct {
 		name        string
 		descriptors []plugin.Descriptor
@@ -175,6 +185,7 @@ func TestPrepareDefaultModifiers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			prepared, err := semantic.New(fakeCatalog{tt.descriptors}).Prepare([]model.OptField{tt.field})
 			require.NoError(t, err)
 			require.Equal(t, tt.want, prepared[0].Modifiers)
@@ -185,8 +196,10 @@ func TestPrepareDefaultModifiers(t *testing.T) {
 
 func builtinRegistry(tb testing.TB) *plugin.Registry {
 	tb.Helper()
+
 	r := plugin.NewRegistry()
 	require.NoError(tb, builtin.Register(r))
+
 	return r
 }
 
@@ -233,6 +246,7 @@ func TestPrepareInputAppliesSettingsPolicies(t *testing.T) {
 	for i := range many {
 		many[i] = model.OptField{FieldName: fmt.Sprintf("f%d", i), OptionName: fmt.Sprintf("F%d", i), Type: "int"}
 	}
+
 	_, err = p.PrepareInput(model.GenerateInput{TypeName: "options", WithIsSet: true,
 		IsSetField: "set", Fields: many})
 	require.ErrorContains(t, err, "at most 64")

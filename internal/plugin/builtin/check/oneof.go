@@ -26,15 +26,18 @@ func (c *OneOfCheck) Validate(field model.OptField, rawValue string) error {
 	if plugin.ValueKindOf(field) != plugin.ValueString {
 		return notApplicable(field, "string")
 	}
+
 	if len(parseStringList(rawValue)) == 0 {
 		return fmt.Errorf("%w: oneof requires at least one value", plugin.ErrInvalidCheckValue)
 	}
+
 	return nil
 }
 
 // Generate renders the validation code for valueVar.
 func (c *OneOfCheck) Generate(ctx plugin.GenerationContext, field model.OptField, valueVar, rawValue string) []string {
 	vals := parseStringList(rawValue)
+
 	return []string{
 		"switch " + valueVar + " {",
 		"case " + strings.Join(vals, ", ") + ":",
@@ -51,29 +54,40 @@ func parseStringList(raw string) []string {
 			s = rest
 		}
 	}
+
 	if strings.TrimSpace(s) == "" {
 		return nil
 	}
-	var items []string
-	var cur strings.Builder
-	var quote rune
+
+	var (
+		items []string
+		cur   strings.Builder
+		quote rune
+	)
+
 	escaped := false
+
 	for _, r := range s {
 		if quote != 0 {
 			cur.WriteRune(r)
+
 			if escaped {
 				escaped = false
 				continue
 			}
+
 			if r == '\\' {
 				escaped = true
 				continue
 			}
+
 			if r == quote {
 				quote = 0
 			}
+
 			continue
 		}
+
 		switch r {
 		case '"', '\'', '`':
 			quote = r
@@ -82,14 +96,17 @@ func parseStringList(raw string) []string {
 			if item := normalizeStringLiteral(cur.String()); item != "" {
 				items = append(items, item)
 			}
+
 			cur.Reset()
 		default:
 			cur.WriteRune(r)
 		}
 	}
+
 	if item := normalizeStringLiteral(cur.String()); item != "" {
 		items = append(items, item)
 	}
+
 	return items
 }
 
@@ -98,11 +115,14 @@ func normalizeStringLiteral(s string) string {
 	if s == "" {
 		return ""
 	}
+
 	if len(s) >= 2 && ((s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '`' && s[len(s)-1] == '`')) {
 		return s
 	}
+
 	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
 		s = s[1 : len(s)-1]
 	}
+
 	return strconv.Quote(s)
 }

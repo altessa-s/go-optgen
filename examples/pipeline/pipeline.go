@@ -26,12 +26,14 @@ func Check(s string, opts ...CheckOption) (time.Duration, error) {
 	if len(s) > o.maxLen {
 		return 0, fmt.Errorf("%w: longer than %d bytes", ErrRejected, o.maxLen)
 	}
+
 	lower := strings.ToLower(s)
 	for _, word := range o.forbidden {
 		if strings.Contains(lower, word) {
 			return 0, fmt.Errorf("%w: contains %q", ErrRejected, word)
 		}
 	}
+
 	return o.timeout, nil
 }
 
@@ -44,5 +46,6 @@ func Transform(s string, opts ...TransformOption) string {
 	case caseUpper:
 		s = strings.ToUpper(s)
 	}
+
 	return o.prefix + s
 }

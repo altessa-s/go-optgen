@@ -230,6 +230,7 @@ func TestBuildEarlyReturn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "T", OptionType: "Option", OptionReturnsError: tt.returnErr}, nil, nil, model.GenericInfo{})
 			require.Equal(t, tt.want, plugin.BuildEarlyReturn(ctx, tt.cond))
 		})
@@ -314,7 +315,9 @@ func TestGenerationContextAddImport(t *testing.T) {
 // newCapturingRegistry returns a registry whose warnings are collected.
 func newCapturingRegistry(tb testing.TB) (*plugin.Registry, *[]string) {
 	tb.Helper()
+
 	var msgs []string
+
 	return plugin.NewRegistry(plugin.WithWarningSink(func(msg string) { msgs = append(msgs, msg) })), &msgs
 }
 
@@ -329,6 +332,7 @@ func mustRegister(tb testing.TB, r *plugin.Registry, plugins ...any) {
 
 func TestRegistryFieldPlugins(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 
 	low := &mockFieldPlugin{name: "Low", priority: 1, canHandle: func(model.OptField) bool { return true }}
@@ -388,6 +392,7 @@ func TestRegistryCheckPlugins(t *testing.T) {
 	require.ErrorIs(t, err, plugin.ErrUnknownCheck)
 
 	require.NoError(t, r.DisablePlugins("FOO"))
+
 	for _, key := range []string{"foo", "bar"} {
 		_, _, err = r.FindCheckPlugin(key)
 		require.ErrorIs(t, err, plugin.ErrPluginDisabled)
@@ -410,6 +415,7 @@ func TestRegistryTransformPlugins(t *testing.T) {
 
 	tp, ok := r.FindTransformPlugin("foo", "string")
 	require.True(t, ok)
+
 	out, applied := tp.Apply(plugin.GenerationContext{}, model.OptField{}, "string", "v")
 	require.True(t, applied)
 	require.Equal(t, "v!", out)
@@ -576,12 +582,16 @@ func TestRegistryDescriptorsOrderByKind(t *testing.T) {
 		&mockFieldPlugin{name: "FP1", priority: 5},
 	)
 
-	var kinds []plugin.Kind
-	var names []string
+	var (
+		kinds []plugin.Kind
+		names []string
+	)
+
 	for _, d := range r.Descriptors() {
 		kinds = append(kinds, d.Kind)
 		names = append(names, d.Name)
 	}
+
 	require.Equal(t, []plugin.Kind{plugin.KindField, plugin.KindTypeDefault, plugin.KindTransform, plugin.KindModifier, plugin.KindOptCheck}, kinds)
 	require.Equal(t, []string{"FP1", "TD1", "TP1", "mp1", "ck"}, names)
 	require.Empty(t, plugin.NewRegistry().Descriptors())
@@ -693,6 +703,7 @@ func TestRegistryRegistration(t *testing.T) {
 
 	tp, ok := r.FindTransformPlugin("globaltesttransform", "string")
 	require.True(t, ok)
+
 	out, applied := tp.Apply(plugin.GenerationContext{}, model.OptField{}, "string", "v")
 	require.True(t, applied)
 	require.Equal(t, "v!", out)
@@ -747,10 +758,12 @@ func TestRegistryRejectsConflicts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			r := plugin.NewRegistry()
 			if tt.first != nil {
 				mustRegister(t, r, tt.first)
 			}
+
 			require.ErrorIs(t, r.Register(tt.second), tt.wantErr)
 		})
 	}
@@ -758,6 +771,7 @@ func TestRegistryRejectsConflicts(t *testing.T) {
 
 func TestRegistryCheckAndValueKeysUseSeparateNamespaces(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 	mustRegister(t, r, &mockModifierPlugin{key: "nonempty"}, &mockCheckPlugin{spec: plugin.CheckSpec{Key: "required"}, aliases: []string{"nonempty"}})
 	_, _, err := r.FindCheckPlugin("nonempty")
@@ -766,6 +780,7 @@ func TestRegistryCheckAndValueKeysUseSeparateNamespaces(t *testing.T) {
 
 func TestRegistryDisablePluginsRejectsUnknownNames(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 	mustRegister(t, r, &mockFieldPlugin{name: "Known"})
 	err := r.DisablePlugins("known", "missing")
@@ -779,8 +794,12 @@ func TestRegistryDisablePluginsRejectsUnknownNames(t *testing.T) {
 // the registry lock held, so a sink may call back into the registry.
 func TestRegistryWarningSinkMayReenter(t *testing.T) {
 	t.Parallel()
-	var r *plugin.Registry
-	var names []string
+
+	var (
+		r     *plugin.Registry
+		names []string
+	)
+
 	r = plugin.NewRegistry(plugin.WithWarningSink(func(string) {
 		names = append(names, r.Descriptors()[0].Name)
 		_ = r.Register(&mockTypeDefaultPlugin{name: "Late"})
@@ -793,9 +812,11 @@ func TestRegistryWarningSinkMayReenter(t *testing.T) {
 
 func TestIsNumericField(t *testing.T) {
 	t.Parallel()
+
 	for _, typ := range plugin.NumericTypes() {
 		require.True(t, plugin.IsNumericField(model.OptField{Type: typ}), typ)
 	}
+
 	require.True(t, plugin.IsNumericField(model.OptField{Type: "Port", IsNumeric: true}), "resolved named numeric type")
 	require.False(t, plugin.IsNumericField(model.OptField{Type: "[]int", IsSlice: true}))
 	require.False(t, plugin.IsNumericField(model.OptField{Type: "string"}))

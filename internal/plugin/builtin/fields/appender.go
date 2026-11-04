@@ -44,6 +44,7 @@ func (p *DefaultAppenderPlugin) CanHandle(field model.OptField) bool {
 	if !field.IsSlice {
 		return false
 	}
+
 	return plugin.IsTruthyMetadata(field.Metadata, "append")
 }
 

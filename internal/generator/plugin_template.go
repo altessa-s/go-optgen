@@ -149,9 +149,11 @@ func (g *Generator) renderPluginTemplate(data any) ([]byte, error) {
 	if err := pluginOptionsTemplate.Execute(&buf, data); err != nil {
 		return nil, fmt.Errorf("template execution failed: %w", err)
 	}
+
 	out, err := format.Source(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to format generated code: %w", err)
 	}
+
 	return out, nil
 }

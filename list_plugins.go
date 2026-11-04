@@ -19,7 +19,9 @@ import (
 // plugins are registered explicitly for each command execution.
 func NewListPlugins(opts ...Option) *cobra.Command {
 	o := newOptions(opts...)
+
 	var showAll bool
+
 	cmd := &cobra.Command{
 		Use:   "list-plugins",
 		Short: "List known plugin and provider type names",
@@ -32,7 +34,9 @@ These names can be used with --disable-plugins.
 			if err != nil {
 				return err
 			}
+
 			printPlugins(cmd.OutOrStdout(), registry.Descriptors(), showAll)
+
 			return nil
 		},
 	}
@@ -48,6 +52,7 @@ func printPlugins(w io.Writer, descriptors []plugin.Descriptor, showAll bool) {
 	for _, d := range descriptors {
 		byKind[d.Kind] = append(byKind[d.Kind], d)
 	}
+
 	if len(byKind[plugin.KindField]) == 0 && len(byKind[plugin.KindTypeDefault]) == 0 && !showAll {
 		_, _ = fmt.Fprintln(w, "No plugins/providers registered.")
 		return
@@ -57,24 +62,30 @@ func printPlugins(w io.Writer, descriptors []plugin.Descriptor, showAll bool) {
 	for _, d := range byKind[plugin.KindField] {
 		_, _ = fmt.Fprintf(w, "  - %s (priority=%d)\n", d.Name, d.Meta.Priority)
 	}
+
 	_, _ = fmt.Fprintln(w, "Type default providers:")
 	for _, d := range byKind[plugin.KindTypeDefault] {
 		_, _ = fmt.Fprintf(w, "  - %s\n", d.Name)
 	}
+
 	_, _ = fmt.Fprintln(w, "Transform plugins:")
 	for _, d := range byKind[plugin.KindTransform] {
 		_, _ = fmt.Fprintf(w, "  - %s (key=%q)\n", d.Name, d.Key)
 	}
+
 	_, _ = fmt.Fprintln(w, "Modifier plugins:")
 	for _, d := range byKind[plugin.KindModifier] {
 		_, _ = fmt.Fprintf(w, "  - %s (key=%q, phase=%s)\n", d.Name, d.Key, d.Phase)
 	}
+
 	_, _ = fmt.Fprintln(w, "Optcheck plugins:")
+
 	for _, d := range byKind[plugin.KindOptCheck] {
 		aliases := ""
 		if len(d.Aliases) > 0 {
 			aliases = ", aliases=" + strings.Join(d.Aliases, ",")
 		}
+
 		_, _ = fmt.Fprintf(w, "  - %s (key=%q%s)\n", d.Name, d.Key, aliases)
 	}
 }

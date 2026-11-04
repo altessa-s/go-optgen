@@ -68,21 +68,27 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+
 	if err := req.Settings.Verify(); err != nil {
 		return nil, err
 	}
+
 	packages, err := s.source.Parse(ctx, req.Directory, req.Settings.TypeName, req.AllFields)
 	if err != nil {
 		return nil, err
 	}
+
 	var artifacts []Artifact
+
 	for _, pkg := range packages {
 		if len(pkg.Fields) == 0 {
 			continue
 		}
+
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+
 		in, err := s.preparer.PrepareInput(model.GenerateInput{
 			RenderSettings:      req.Settings,
 			PackageName:         pkg.Name,
@@ -95,18 +101,23 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 		if err != nil {
 			return nil, err
 		}
+
 		content, err := s.renderer.Generate(in)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate: %w", err)
 		}
+
 		artifacts = append(artifacts, Artifact{Path: filepath.Join(req.Directory, req.Output), Content: content, Options: len(in.Fields)})
 	}
+
 	if len(artifacts) == 0 {
 		return nil, fmt.Errorf("no struct with name '%s' and opt tags found", req.Settings.TypeName)
 	}
+
 	if len(artifacts) > 1 {
 		return nil, fmt.Errorf("multiple packages contain target struct %q", req.Settings.TypeName)
 	}
+
 	if !req.DryRun {
 		for _, artifact := range artifacts {
 			if err := s.output.Write(ctx, artifact.Path, artifact.Content, req.Formatter); err != nil {
@@ -114,5 +125,6 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 			}
 		}
 	}
+
 	return artifacts, nil
 }

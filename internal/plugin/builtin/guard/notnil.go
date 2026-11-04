@@ -65,6 +65,7 @@ func (m *NotNilModifier) Generate(ctx plugin.GenerationContext, field model.OptF
 	}
 
 	var code []string
+
 	switch {
 	case field.IsSlice:
 		code = plugin.BuildEarlyReturn(ctx, "len("+inputVar+") == 0")
@@ -73,6 +74,7 @@ func (m *NotNilModifier) Generate(ctx plugin.GenerationContext, field model.OptF
 	default:
 		code = plugin.BuildNilEarlyReturn(ctx, inputVar)
 	}
+
 	return plugin.ModifierResult{Code: code, OutputVar: inputVar}
 }
 
@@ -82,5 +84,6 @@ func comparesWithNil(field model.OptField) bool {
 	if field.IsInterface {
 		return false
 	}
+
 	return field.IsNilable || strings.HasPrefix(field.Type, "*") || strings.HasPrefix(field.Type, "map[")
 }

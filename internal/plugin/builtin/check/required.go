@@ -26,6 +26,7 @@ func (c *RequiredCheck) Validate(field model.OptField, _ string) error {
 	if plugin.ValueKindOf(field) == plugin.ValueOther && !canBeNil(field) {
 		return notApplicable(field, "string, slice, map, pointer, interface")
 	}
+
 	return nil
 }
 
@@ -45,6 +46,7 @@ func (c *RequiredCheck) Generate(ctx plugin.GenerationContext, field model.OptFi
 			// map, slice, channel or function types.
 			return []string{"if " + valueVar + " == nil {", "  " + fail, "}"}
 		}
+
 		return plugin.BuildNilCheck(ctx, valueVar, fail)
 	default:
 		return plugin.BuildNilCheck(ctx, valueVar, fail)

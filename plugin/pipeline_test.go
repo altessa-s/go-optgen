@@ -15,12 +15,17 @@ import (
 
 func TestPipelinePropagatesValuesAndStopsInEveryPhase(t *testing.T) {
 	t.Parallel()
+
 	for _, finalPhase := range []plugin.Phase{0, plugin.PhaseGuard, plugin.PhaseTransform, plugin.PhasePostProcess, plugin.PhaseCheck} {
 		t.Run(finalPhase.String(), func(t *testing.T) {
 			t.Parallel()
+
 			r := plugin.NewRegistry()
+
 			var calls []string
+
 			field := model.OptField{Modifiers: []string{"guard", "transform", "postprocess", "check"}}
+
 			for _, phase := range []plugin.Phase{plugin.PhaseGuard, plugin.PhaseTransform, plugin.PhasePostProcess, plugin.PhaseCheck} {
 				require.NoError(t, r.Register(&mockModifierPlugin{key: phase.String(), phase: phase, canHandle: func(model.OptField) bool { return true },
 					generate: func(_ plugin.GenerationContext, _ model.OptField, in string) plugin.ModifierResult {
@@ -28,18 +33,23 @@ func TestPipelinePropagatesValuesAndStopsInEveryPhase(t *testing.T) {
 						return plugin.ModifierResult{Code: []string{phase.String()}, OutputVar: in + "x", Final: phase == finalPhase}
 					}}))
 			}
+
 			result := plugin.NewPipeline(r).BuildPipeline(plugin.GenerationContext{}, field, "v")
+
 			count := 4
 			if finalPhase != 0 {
 				count = int(finalPhase) / 10
 			}
+
 			require.Len(t, calls, count)
 			require.Equal(t, finalPhase != 0, result.EarlyReturn)
+
 			value := "v"
 			for _, in := range calls {
 				require.Equal(t, value, in)
 				value += "x"
 			}
+
 			require.Equal(t, value, result.ValueVar)
 		})
 	}
@@ -47,6 +57,7 @@ func TestPipelinePropagatesValuesAndStopsInEveryPhase(t *testing.T) {
 
 func TestPipelineRunsEnabledChecksByPriority(t *testing.T) {
 	t.Parallel()
+
 	r := plugin.NewRegistry()
 	require.NoError(t, r.Register(
 		&mockCheckPlugin{spec: plugin.CheckSpec{Key: "late", Priority: 20}},
@@ -54,6 +65,7 @@ func TestPipelineRunsEnabledChecksByPriority(t *testing.T) {
 		&mockCheckPlugin{spec: plugin.CheckSpec{Key: "off", Priority: 0}},
 	))
 	require.NoError(t, r.DisablePlugins("off"))
+
 	field := model.OptField{Checks: map[string]string{"late": "2", "early": "1", "off": "", "unknown": ""}}
 	result := plugin.NewPipeline(r).BuildPipeline(plugin.GenerationContext{}, field, "v")
 	require.Equal(t, "early\nv\n1\nlate\nv\n2", result.Code)
@@ -61,6 +73,7 @@ func TestPipelineRunsEnabledChecksByPriority(t *testing.T) {
 
 func TestValueKindOf(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		field model.OptField
 		want  plugin.ValueKind
@@ -78,6 +91,7 @@ func TestValueKindOf(t *testing.T) {
 
 func TestBuildNilCheck(t *testing.T) {
 	t.Parallel()
+
 	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "T", OptionType: "Option", OptionReturnsError: true}, nil, nil, model.GenericInfo{})
 	require.Equal(t, []string{
 		"switch rv := reflect.ValueOf(v); rv.Kind() {",

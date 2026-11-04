@@ -41,6 +41,7 @@ func (p *NetIPParsePlugin) CanHandle(field model.OptField) bool {
 	if !field.IsSlice || field.ElemType != "net.IP" {
 		return false
 	}
+
 	return plugin.IsTruthyMetadata(field.Metadata, "parseip")
 }
 
@@ -76,12 +77,14 @@ func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	appendMode := plugin.IsTruthyMetadata(field.Metadata, "append")
 
 	errExpr := `fmt.Errorf("invalid IP %q", s)`
+
 	if v, ok := field.Metadata["err"]; ok {
 		v = strings.TrimSpace(v)
 		if v != "" {
 			errExpr = v
 		}
 	}
+
 	if ctx.OptionReturnsError && strings.HasPrefix(errExpr, "fmt.") {
 		ctx.AddImport("fmt")
 	}
@@ -95,5 +98,6 @@ func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.Op
 		Append:  appendMode,
 		ErrExpr: errExpr,
 	}
+
 	return fieldtmpl.Execute(netIPParseTemplate, data)
 }

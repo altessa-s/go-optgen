@@ -42,6 +42,7 @@ func TypeToString(expr ast.Expr) string {
 		if t.Len != nil {
 			return "[" + printNode(t.Len) + "]" + TypeToString(t.Elt)
 		}
+
 		return "[]" + TypeToString(t.Elt)
 	case *ast.MapType:
 		return "map[" + TypeToString(t.Key) + "]" + TypeToString(t.Value)
@@ -49,6 +50,7 @@ func TypeToString(expr ast.Expr) string {
 		if t.Methods == nil || len(t.Methods.List) == 0 {
 			return typeAny
 		}
+
 		return printNode(t)
 	case *ast.FuncType:
 		return printNode(t)
@@ -80,6 +82,7 @@ func TypeToString(expr ast.Expr) string {
 		for i, idx := range t.Indices {
 			args[i] = TypeToString(idx)
 		}
+
 		return TypeToString(t.X) + "[" + strings.Join(args, ", ") + "]"
 	default:
 		return typeAny
@@ -93,6 +96,7 @@ func printNode(node ast.Node) string {
 	if err := printer.Fprint(&buf, token.NewFileSet(), node); err != nil {
 		return typeAny
 	}
+
 	return buf.String()
 }
 
@@ -103,6 +107,7 @@ func printNode(node ast.Node) string {
 // Returns a list of import paths needed for this type.
 func ExtractImportsFromType(expr ast.Expr, imports map[string]model.ImportInfo) []model.GeneratedImport {
 	var pkgs []model.GeneratedImport
+
 	seen := make(map[model.GeneratedImport]bool)
 
 	// Handle standard library types that might not be in imports map yet
@@ -117,6 +122,7 @@ func ExtractImportsFromType(expr ast.Expr, imports map[string]model.ImportInfo) 
 			seen[key] = true
 			pkgs = append(pkgs, key)
 		}
+
 		return true
 	})
 
@@ -142,6 +148,7 @@ func stdLibTypeImport(typeStr string) (string, bool) {
 	}
 
 	importPath, exists := stdLibImports[cleanType]
+
 	return importPath, exists
 }
 
@@ -152,10 +159,12 @@ func selectorImport(n ast.Node, imports map[string]model.ImportInfo) (model.Gene
 	if !ok {
 		return model.GeneratedImport{}, false
 	}
+
 	ident, ok := sel.X.(*ast.Ident)
 	if !ok {
 		return model.GeneratedImport{}, false
 	}
+
 	imp, found := imports[ident.Name]
 	if !found {
 		// Fallback: the actual Go package name might differ from the path segment.
@@ -163,6 +172,7 @@ func selectorImport(n ast.Node, imports map[string]model.ImportInfo) (model.Gene
 		// Search all imports for a path containing the identifier as a segment.
 		imp, found = findImportByPackageName(ident.Name, imports)
 	}
+
 	if !found {
 		return model.GeneratedImport{}, false
 	}
@@ -177,6 +187,7 @@ func selectorImport(n ast.Node, imports map[string]model.ImportInfo) (model.Gene
 	if ident.Name != "" && ident.Name != pkgName && ident.Name != "_" && ident.Name != "." {
 		return model.GeneratedImport{Path: imp.Path, Alias: ident.Name}, true
 	}
+
 	return model.GeneratedImport{Path: imp.Path}, true
 }
 
@@ -198,11 +209,13 @@ func findImportByPackageName(pkgName string, imports map[string]model.ImportInfo
 			if trimmed, found := strings.CutSuffix(seg, ".go"); found {
 				cleanSeg = trimmed
 			}
+
 			if cleanSeg == pkgName {
 				return imp, true
 			}
 		}
 	}
+
 	return model.ImportInfo{}, false
 }
 
@@ -269,6 +282,7 @@ func ExtractTypeParams(ts *ast.TypeSpec) []model.TypeParam {
 	}
 
 	var params []model.TypeParam
+
 	for _, field := range ts.TypeParams.List {
 		constraint := typeAny // default constraint
 		if field.Type != nil {
@@ -282,5 +296,6 @@ func ExtractTypeParams(ts *ast.TypeSpec) []model.TypeParam {
 			})
 		}
 	}
+
 	return params
 }

@@ -28,5 +28,6 @@ func Register(r *plugin.Registry) error {
 			return err
 		}
 	}
+
 	return nil
 }

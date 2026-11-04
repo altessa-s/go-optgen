@@ -20,8 +20,10 @@ func newCtx() plugin.GenerationContext {
 
 func mustFind(tb testing.TB, key string) plugin.TransformPlugin {
 	tb.Helper()
+
 	p, ok := testRegistry().FindTransformPlugin(key, "string")
 	require.True(tb, ok, key)
+
 	return p
 }
 
@@ -47,6 +49,7 @@ func TestSimpleStringTransforms(t *testing.T) {
 			got, ok := p.Apply(ctx, model.OptField{}, "string", "v")
 			require.True(t, ok)
 			require.Equal(t, tc.want, got)
+
 			imps := ctx.GetAdditionalImports()
 			require.Len(t, imps, 1)
 			require.Equal(t, "strings", imps[0].Path)
@@ -82,10 +85,12 @@ func TestTrimPrefixSuffix(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.key+"/"+tc.want, func(t *testing.T) {
 			t.Parallel()
+
 			ctx := newCtx()
 			got, ok := mustFind(t, tc.key).Apply(ctx, model.OptField{Modifiers: tc.mods}, "string", "v")
 			require.Equal(t, tc.ok, ok)
 			require.Equal(t, tc.want, got)
+
 			if !tc.ok {
 				require.Empty(t, ctx.GetAdditionalImports())
 			}

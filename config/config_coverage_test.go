@@ -86,6 +86,7 @@ func TestGetPackageConfig(t *testing.T) {
 
 	t.Run("full override with path cleaning", func(t *testing.T) {
 		t.Parallel()
+
 		got := cfg.GetPackageConfig("./pkg/full/")
 		require.Equal(t, config.Defaults{
 			Type:            "settings",
@@ -107,6 +108,7 @@ func TestGetPackageConfig(t *testing.T) {
 
 	t.Run("partial override inherits the rest", func(t *testing.T) {
 		t.Parallel()
+
 		got := cfg.GetPackageConfig("pkg/partial")
 		require.Equal(t, "p_gen.go", got.Output)
 		require.Equal(t, "options", got.Type)

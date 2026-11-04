@@ -28,6 +28,7 @@ func Example() {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println(s)
 	fmt.Println(s.Logger() != nil)
 	// Output:
@@ -60,11 +61,13 @@ func Example_validation() {
 // String options accept a *string too; a nil pointer leaves the field unset.
 func Example_stringPointer() {
 	var mode *string
+
 	s, err := server.New(":80", server.WithName(new("web")), server.WithMode(mode))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println(s)
 	// Output:
 	// web@:80 http timeout=5s maxConns=1024 keepAlive=true debug=false proxies=[] tags=[] headers=[]

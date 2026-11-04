@@ -32,13 +32,16 @@ func parsePackage(tb testing.TB, files map[string]string) *ast.Package {
 	tb.Helper()
 
 	fset := token.NewFileSet()
+
 	pkg := &ast.Package{Files: make(map[string]*ast.File, len(files))}
 	for name, source := range files {
 		file, err := goparser.ParseFile(fset, name, src(source), goparser.ParseComments)
 		require.NoError(tb, err)
+
 		pkg.Name = file.Name.Name
 		pkg.Files[name] = file
 	}
+
 	return pkg
 }
 
@@ -48,6 +51,7 @@ func mustParseExpr(tb testing.TB, expr string) ast.Expr {
 
 	parsed, err := goparser.ParseExpr(expr)
 	require.NoError(tb, err)
+
 	return parsed
 }
 
@@ -58,16 +62,20 @@ func findTypeSpec(tb testing.TB, pkg *ast.Package, name string) *ast.TypeSpec {
 	tb.Helper()
 
 	var found *ast.TypeSpec
+
 	for _, file := range pkg.Files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			if ts, ok := n.(*ast.TypeSpec); ok && ts.Name.Name == name {
 				found = ts
 				return false
 			}
+
 			return true
 		})
 	}
+
 	require.NotNil(tb, found, "type %s not found in fixture", name)
+
 	return found
 }
 
@@ -79,7 +87,9 @@ func fieldByOption(tb testing.TB, fields []model.OptField, optionName string) mo
 			return f
 		}
 	}
+
 	require.Failf(tb, "field not found", "no field with option name %q", optionName)
+
 	return model.OptField{}
 }
 
@@ -373,11 +383,13 @@ type options struct {
 			t.Parallel()
 
 			pkg := parsePackage(t, map[string]string{"options.go": tc.source})
+
 			result, err := parser.FindOptFields(pkg, "options", false, nil)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
 			}
+
 			require.NoError(t, err)
 			require.Len(t, result.Fields, 1)
 			require.Equal(t, tc.checks, result.Fields[0].Checks)
@@ -690,6 +702,7 @@ func TestExtractImportsFromType(t *testing.T) {
 
 func importSpecs(imports []model.GeneratedImport) []string {
 	var out []string
+
 	for _, imp := range imports {
 		if imp.Alias != "" {
 			out = append(out, imp.Alias+":"+imp.Path)
@@ -697,6 +710,7 @@ func importSpecs(imports []model.GeneratedImport) []string {
 			out = append(out, imp.Path)
 		}
 	}
+
 	return out
 }
 

@@ -17,6 +17,7 @@ func NewClient(opts ...Option) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("client: %w", err)
 	}
+
 	return &Client{opts: o}, nil
 }
 
