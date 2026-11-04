@@ -18,9 +18,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/altessa-s/go-optgen/model"
-
 	"golang.org/x/tools/go/packages"
+
+	"github.com/altessa-s/go-optgen/model"
 
 	optparser "github.com/altessa-s/go-optgen/internal/parser"
 )
