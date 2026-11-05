@@ -37,6 +37,23 @@ type OptField struct {
 	HasModifiers   bool // Whether the field has any modifiers
 	DefaultOnly    bool // If true, include in defaultOptions() but skip WithXxx generation
 	Mandatory      bool // optgen:"mandatory": a constructor parameter instead of a WithXxx option
+	SetterTarget   *SetterTarget
+}
+
+// SetterTarget describes a resolved optfn function or method.
+type SetterTarget struct {
+	Expression   string
+	Method       bool
+	Parameters   []FuncParameter
+	ReturnsError bool
+	Imports      []GeneratedImport
+}
+
+// FuncParameter is one parameter in an optfn target signature.
+type FuncParameter struct {
+	Name     string
+	Type     string
+	Variadic bool
 }
 
 // HasModifier reports whether modifier appears in the field's optval tag list.

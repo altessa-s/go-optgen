@@ -189,6 +189,8 @@ type fieldProcessingContext struct {
 	hasOptTag bool
 	optgenTag string
 	hasOptgen bool
+	optfn     string
+	hasOptfn  bool
 }
 
 // processStructField processes a single struct field and returns the OptFields if it should be included.
@@ -204,6 +206,10 @@ func processStructField(field *ast.Field, processAllFields bool, imports map[str
 	if ctx.hasOptTag {
 		_, skip := ParseOptName(ctx.tag)
 		if skip {
+			if ctx.hasOptfn {
+				return nil, fmt.Errorf("field %s: opt:\"-\" cannot be combined with optfn", field.Names[0].Name)
+			}
+
 			return nil, nil
 		}
 	}
@@ -226,6 +232,7 @@ func extractFieldContext(field *ast.Field) fieldProcessingContext {
 
 	tag, hasOptTag := LookupTag(tagStr, "opt")
 	optgenTag, hasOptgen := LookupTag(tagStr, "optgen")
+	optfn, hasOptfn := LookupTag(tagStr, "optfn")
 
 	return fieldProcessingContext{
 		tagStr:    tagStr,
@@ -233,6 +240,8 @@ func extractFieldContext(field *ast.Field) fieldProcessingContext {
 		hasOptTag: hasOptTag,
 		optgenTag: optgenTag,
 		hasOptgen: hasOptgen,
+		optfn:     optfn,
+		hasOptfn:  hasOptfn,
 	}
 }
 
@@ -246,15 +255,20 @@ func shouldProcessField(ctx fieldProcessingContext, processAllFields bool) bool 
 	default:
 		_, hasOptval := LookupTag(ctx.tagStr, "optval")
 		_, hasOptcheck := LookupTag(ctx.tagStr, "optcheck")
+		_, hasOptfn := LookupTag(ctx.tagStr, "optfn")
 
-		return ctx.hasOptgen || hasOptval || hasOptcheck
+		return ctx.hasOptgen || hasOptval || hasOptcheck || hasOptfn
 	}
 }
 
 // buildOptFields constructs OptFields from an AST field and its context.
 func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[string]model.ImportInfo, types TypeResolver) ([]model.OptField, error) {
 	explicitOptName, _ := ParseOptName(ctx.tag)
+
 	parsed := parseFieldTags(ctx.tagStr)
+	if err := validateSetterTags(field, ctx, parsed); err != nil {
+		return nil, err
+	}
 
 	// Extract type information
 	typeStr := TypeToString(field.Type)
@@ -288,7 +302,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 		}
 	}
 
-	out := make([]model.OptField, 0, len(field.Names))
+	out := make([]model.OptField, 0, len(field.Names)*max(1, len(parsed.SetterTargets)))
 	for _, ident := range field.Names {
 		fieldName := ident.Name
 
@@ -297,7 +311,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			optName = naming.OptionName(fieldName)
 		}
 
-		out = append(out, model.OptField{
+		base := model.OptField{
 			FieldName:    fieldName,
 			OptionName:   optName,
 			Type:         typeStr,
@@ -318,10 +332,83 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			IsNumeric:      resolved && facts.Numeric,
 			IsComparable:   resolved && facts.Comparable,
 			ElemComparable: elemResolved && elemFacts.Comparable,
-		})
+		}
+		if len(parsed.SetterTargets) == 0 {
+			out = append(out, base)
+			continue
+		}
+
+		targetFields, err := resolveSetterFields(field, base, parsed.SetterTargets, imports, types)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, targetFields...)
 	}
 
 	return out, nil
+}
+
+func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed parsedFieldTags) error {
+	fieldName := field.Names[0].Name
+	if parsed.TagError != nil {
+		return fmt.Errorf("field %s: %w", fieldName, parsed.TagError)
+	}
+
+	if !ctx.hasOptfn {
+		return nil
+	}
+
+	if _, exists := LookupTag(ctx.tagStr, "optval"); exists {
+		return fmt.Errorf("field %s: optfn cannot be combined with optval", fieldName)
+	}
+
+	if _, exists := LookupTag(ctx.tagStr, "optcheck"); exists {
+		return fmt.Errorf("field %s: optfn cannot be combined with optcheck", fieldName)
+	}
+
+	for key := range parsed.Metadata {
+		if key != "manual" {
+			return fmt.Errorf("field %s: optfn cannot be combined with optgen modifier %q", fieldName, key)
+		}
+	}
+
+	return nil
+}
+
+func resolveSetterFields(
+	field *ast.Field,
+	base model.OptField,
+	targets map[string]string,
+	imports map[string]model.ImportInfo,
+	resolver TypeResolver,
+) ([]model.OptField, error) {
+	if resolver == nil {
+		return nil, fmt.Errorf("field %s: optfn target resolution requires type information", base.FieldName)
+	}
+
+	fields := make([]model.OptField, 0, len(targets))
+	for _, optionName := range slices.Sorted(maps.Keys(targets)) {
+		expression := targets[optionName]
+
+		target, err := resolver.ResolveSetterTarget(field.Type, field.Pos(), expression, strings.HasPrefix(expression, "."), imports)
+		if err != nil {
+			return nil, fmt.Errorf("field %s option %s target %s: %w", base.FieldName, optionName, expression, err)
+		}
+
+		setterField := base
+		setterField.OptionName = optionName
+		setterField.SetterTarget = &target
+
+		if setterField.Metadata == nil {
+			setterField.Metadata = make(map[string]string)
+		}
+
+		setterField.Metadata["optfn"] = "true"
+		fields = append(fields, setterField)
+	}
+
+	return fields, nil
 }
 
 // extractFieldDoc extracts documentation from a field's Doc or Comment.

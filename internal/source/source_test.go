@@ -16,6 +16,31 @@ import (
 	"github.com/altessa-s/go-optgen/model"
 )
 
+func TestReader_OptfnInvalidDeclarations(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ name, declaration, want string }{
+		{"unresolved target", `type options struct { value string ` + "`optfn:\"Value=missing\"`" + ` }`, "field value option Value target missing"},
+		{"uninstantiated generic", `func makeValue[T any](v T) T { return v }; type options struct { value string ` + "`optfn:\"Value=makeValue\"`" + ` }`, "generic target must be explicitly instantiated"},
+		{"nonassignable result", `func makeValue(v int) int { return v }; type options struct { value string ` + "`optfn:\"Value=makeValue\"`" + ` }`, "result is not assignable to field type"},
+		{"skip conflict", `type options struct { value string ` + "`opt:\"-\" optfn:\"Value=makeValue\"`" + ` }`, `opt:"-" cannot be combined with optfn`},
+		{"optval conflict", `type options struct { value string ` + "`optfn:\"Value=makeValue\" optval:\"lower\"`" + ` }`, "optfn cannot be combined with optval"},
+		{"optcheck conflict", `type options struct { value string ` + "`optfn:\"Value=makeValue\" optcheck:\"required\"`" + ` }`, "optfn cannot be combined with optcheck"},
+		{"notnil conflict", `type options struct { value string ` + "`optfn:\"Value=makeValue\" optgen:\"notnil\"`" + ` }`, `optfn cannot be combined with optgen modifier "notnil"`},
+		{"duplicate target option", `func makeValue(v string) string { return v }; type options struct { value string ` + "`optfn:\"Value=makeValue, Value=makeValue\"`" + ` }`, `duplicate optfn option name "Value"`},
+		{"empty optfn", `type options struct { value string ` + "`optfn:\"\"`" + ` }`, "optfn requires at least one Name=Target entry"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module optfn.invalid\n\ngo 1.26\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\n"+tc.declaration+"\n"), 0o644))
+			_, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestReaderExcludesTestsAndGeneratedFiles(t *testing.T) {
 	t.Parallel()
 

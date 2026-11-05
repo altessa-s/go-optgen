@@ -19,6 +19,8 @@ package rather than any internal package to access the types they receive and pr
 | `ImportInfo`      | Resolved package import found in the source file being parsed                              |
 | `GeneratedImport` | Import to be rendered in the generated output file                                         |
 | `TypeParam`       | A single type parameter (`Name`, `Constraint`) of a generic option struct                   |
+| `SetterTarget` | Resolved function or method used by an `optfn` option, including its generated signature and imports |
+| `FuncParameter` | Parameter name, type, and variadic flag from a resolved target signature |
 
 ## OptField fields
 
@@ -45,3 +47,4 @@ package rather than any internal package to access the types they receive and pr
 | `HasModifiers` | Whether the field has any modifiers                                                           |
 | `Mandatory`    | `optgen:"mandatory"`: a parameter of the generated constructor instead of a `WithXxx` option  |
 | `DefaultOnly`  | Include the field in `defaultOptions()` but skip `WithXxx` generation                         |
+| `SetterTarget` | Resolved target for an `optfn` setter; nil for ordinary field plugins |

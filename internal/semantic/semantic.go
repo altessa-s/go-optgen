@@ -44,6 +44,7 @@ func New(catalog Catalog, opts ...Option) *Preparer {
 // warning, and type defaults and default modifiers are resolved.
 func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 	out := slices.DeleteFunc(slices.Clone(fields), p.excluded)
+	optionNames := make(map[string]string, len(out))
 
 	policy := newModifierPolicy(p.catalog.Descriptors())
 	if !p.options.defaultModifiers {
@@ -57,10 +58,30 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		}
 
 		f.OptionName = p.options.prefix + f.OptionName
+		if f.SetterTarget != nil {
+			if previous, exists := optionNames[f.OptionName]; exists {
+				return nil, fmt.Errorf("field %s: duplicate optfn option name %q also used by field %s", f.FieldName, f.OptionName, previous)
+			}
+
+			optionNames[f.OptionName] = f.FieldName
+		}
 
 		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
 		if !f.DefaultOnly && f.OptionName != "" && !token.IsIdentifier(f.OptionName) {
 			return nil, fmt.Errorf("field %s: invalid option name %q", f.FieldName, f.OptionName)
+		}
+
+		if f.SetterTarget != nil {
+			if f.Default == "" {
+				f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
+			} else {
+				f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
+			}
+
+			f.Modifiers = nil
+			f.HasModifiers = false
+
+			continue
 		}
 
 		if err := p.prepareChecks(f); err != nil {

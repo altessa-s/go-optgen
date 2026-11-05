@@ -141,6 +141,17 @@ func TestPrepareAppliesPrefixBeforeValidation(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPrepareRejectsDuplicateOptfnOptionNames(t *testing.T) {
+	t.Parallel()
+
+	fields := []model.OptField{
+		{FieldName: "first", OptionName: "Shared", Type: "string", SetterTarget: &model.SetterTarget{}},
+		{FieldName: "second", OptionName: "Shared", Type: "string", SetterTarget: &model.SetterTarget{}},
+	}
+	_, err := semantic.New(builtinRegistry(t)).Prepare(fields)
+	require.ErrorContains(t, err, `field second: duplicate optfn option name "Shared" also used by field first`)
+}
+
 // fakeCatalog serves fixed descriptors for default modifier policy tests.
 type fakeCatalog struct{ descriptors []plugin.Descriptor }
 

@@ -22,13 +22,13 @@ flowchart TD
 
 | Package | Responsibility | Allowed inner dependencies |
 |---------|----------------|----------------------------|
-| `model` | Generation data, field declarations, import information | Standard library |
+| `model` | Generation data, field declarations, import information, resolved setter signatures | Standard library |
 | `plugin` | Extension contracts, explicit catalogs, pipeline execution | `model` |
 | `internal/application` | Parse, prepare, render, publish through ports | `model` |
-| `internal/parser` | Extract syntax without applying plugin policies | `model`, `internal/naming` |
+| `internal/parser` | Extract syntax without applying plugin policies; resolves `optfn` targets through the type resolver port | `model`, `internal/naming` |
 | `internal/semantic` | Validate checks, apply the option prefix, resolve type defaults, default normalization, default modifiers and settings policies (`defaults-from=none`, `with-isset`) | `model`, `plugin` |
 | `internal/generator` | Render prepared input; applies no policy | `model`, `plugin` |
-| `internal/source` | Load and type-check Go packages (`go/packages`), invoke syntax extraction with type facts | `model`, `internal/parser` |
+| `internal/source` | Load and type-check Go packages (`go/packages`), invoke syntax extraction with type facts and resolved function signatures | `model`, `internal/parser` |
 | `internal/output` | Run a formatter and atomically publish successful output | Standard library |
 | `internal/naming` | Derive option names from field names | Standard library |
 | `internal/plugin/builtin` | Register the built-in plugins | `plugin`, its sub-packages |
@@ -51,7 +51,7 @@ flowchart TD
 | Explicit registration | Importing a package must not change generation behavior. |
 | One pipeline | All field handlers share ordering, value propagation, and termination semantics. |
 | Syntax before semantics | Parsing remains deterministic regardless of registered extensions. |
-| Type facts through a parser port | The parser consumes `TypeResolver` facts; only the source adapter depends on `go/packages`. |
+| Type facts through a parser port | The parser consumes `TypeResolver` facts and resolved `optfn` signatures; only the source adapter depends on `go/packages`. |
 | Plugins compiled in | Third-party plugins register through `optgen.WithPlugins` in a wrapping `main`; nothing is loaded at runtime. |
 | Format before publication | Failed formatting preserves the previous generated file. |
 | Generated constructor options | Package tunables follow the same option conventions as generated consumers. |
@@ -66,6 +66,10 @@ path. A generated conditional `return` leaves `Final` false. Transform plugins r
 plugins run by priority and key after modifier plugins in the check phase. Metadata keys are sorted to keep generation deterministic. Field plugins
 receive the value pipeline (`plugin.Pipeline`, `BuildPipeline` only) as a `Generate` argument; check rendering for the generated validation
 function is a generator-side interface. `GenerationContext` carries generation data and collects the imports plugins emit (`AddImport`).
+
+The `optfn` syntax is parsed into one `OptField` per target. The source adapter resolves function expressions with `types.Eval` at the field position and
+methods with `types.LookupFieldOrMethod`; the model carries only signature strings, variadic flags, and generated imports. Function-backed setters do not
+build the value pipeline. Defaults are deduplicated by field before rendering because multiple targets can share one field.
 
 The CLI registers only the built-in plugins; external shared objects are not loaded. Plugin implementations must keep per-generation mutable state
 in the generation context, not in package globals or shared plugin instances.

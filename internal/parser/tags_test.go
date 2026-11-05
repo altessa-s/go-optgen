@@ -12,6 +12,19 @@ import (
 	"github.com/altessa-s/go-optgen/internal/parser"
 )
 
+func TestParseSetterTargets(t *testing.T) {
+	t.Parallel()
+
+	got, err := parser.ParseSetterTargets("Map=.WithExact, Types=maps.New[string, Kind]")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"Map": ".WithExact", "Types": "maps.New[string, Kind]"}, got)
+
+	_, err = parser.ParseSetterTargets("A=make, A=other")
+	require.Error(t, err)
+	_, err = parser.ParseSetterTargets("MissingTarget")
+	require.Error(t, err)
+}
+
 func TestParseTag(t *testing.T) {
 	t.Parallel()
 

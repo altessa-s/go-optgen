@@ -5,9 +5,36 @@
 package parser
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 )
+
+// ParseSetterTargets parses comma-separated optfn Name=Target entries.
+func ParseSetterTargets(s string) (map[string]string, error) {
+	out := make(map[string]string)
+
+	if strings.TrimSpace(s) == "" {
+		return nil, fmt.Errorf("optfn requires at least one Name=Target entry")
+	}
+
+	for _, part := range smartSplit(s) {
+		name, target, ok := strings.Cut(strings.TrimSpace(part), "=")
+
+		name, target = strings.TrimSpace(name), strings.TrimSpace(target)
+		if !ok || name == "" || target == "" {
+			return nil, fmt.Errorf("invalid optfn target %q: expected Name=Target", part)
+		}
+
+		if _, exists := out[name]; exists {
+			return nil, fmt.Errorf("duplicate optfn option name %q", name)
+		}
+
+		out[name] = target
+	}
+
+	return out, nil
+}
 
 // ParseTag extracts the value of a specific tag from a struct tag string.
 // Uses reflect.StructTag for safe and proper tag parsing that handles

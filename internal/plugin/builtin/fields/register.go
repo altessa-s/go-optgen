@@ -13,6 +13,7 @@ func Register(r *plugin.Registry) error {
 		&BoolFlagPlugin{},
 		&ManualPlugin{},
 		&NetIPParsePlugin{},
+		&SetterFuncPlugin{},
 		&DefaultSetterPlugin{},
 		&SliceSetPlugin{},
 	)

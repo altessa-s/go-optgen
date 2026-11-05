@@ -70,12 +70,18 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 			code:       result.Code,
 		})
 		// Mandatory fields have no option but appear in the constructor signature.
-		needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
+		if field.SetterTarget == nil {
+			needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
+		} else if field.Default != "" {
+			needsTypeImports[field.FieldName] = true
+		}
+
 		typeDefs = append(typeDefs, result.TypeDefs...)
 		helpers = append(helpers, result.Helpers...)
 	}
 
 	validation := g.validationCode(ctx, in)
+	defaultFields := fieldsForDefaults(in.Fields)
 
 	for _, imp := range ctx.GetAdditionalImports() {
 		addImport(imp)
@@ -165,7 +171,7 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		TypeDefs:            typeDefs,
 		Functions:           generatedFunctions,
 		Helpers:             helpers,
-		Fields:              in.Fields,
+		Fields:              defaultFields,
 		GenericInfo:         in.GenericInfo,
 		Mandatory:           mandatoryParams(in.Fields),
 		DefaultsFrom:        in.DefaultsFrom,
@@ -177,6 +183,22 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	}
 
 	return g.renderPluginTemplate(data)
+}
+
+func fieldsForDefaults(fields []model.OptField) []model.OptField {
+	seen := make(map[string]bool, len(fields))
+
+	out := make([]model.OptField, 0, len(fields))
+	for _, field := range fields {
+		if seen[field.FieldName] {
+			continue
+		}
+
+		seen[field.FieldName] = true
+		out = append(out, field)
+	}
+
+	return out
 }
 
 // mandatoryParam is a constructor parameter assigned to a mandatory field.

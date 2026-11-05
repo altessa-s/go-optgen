@@ -68,7 +68,7 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 
 		var resolver optparser.TypeResolver
 		if typed {
-			resolver = typeFacts{info: pkg.info}
+			resolver = typeFacts{info: pkg.info, fset: pkg.fset, types: pkg.types}
 		}
 
 		result, err := optparser.FindOptFields(pkg.ast, typeName, all, resolver)
@@ -82,7 +82,7 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 		}
 
 		out = append(out, model.SourcePackage{Name: pkg.ast.Name, Fields: result.Fields, Imports: result.Imports, GenericInfo: result.GenericInfo,
-			NormalizationMethod: normalization, IsSetField: result.IsSetField})
+			NormalizationMethod: normalization, IsSetField: result.IsSetField, Fset: pkg.fset, Types: pkg.types})
 	}
 
 	return out, nil
@@ -90,8 +90,10 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 
 // loadedPackage is a parsed package and, when type-checked, its type info.
 type loadedPackage struct {
-	ast  *ast.Package //nolint:staticcheck // The parser API intentionally operates on go/ast packages.
-	info *types.Info
+	ast   *ast.Package //nolint:staticcheck // The parser API intentionally operates on go/ast packages.
+	info  *types.Info
+	fset  *token.FileSet
+	types *types.Package
 }
 
 // load type-checks dir with go/packages, or parses it without types when it
@@ -123,7 +125,10 @@ func load(ctx context.Context, dir string) ([]loadedPackage, bool, error) {
 		files[filepath.Base(fset.File(f.Pos()).Name())] = f
 	}
 
-	return []loadedPackage{{ast: &ast.Package{Name: pkg.Name, Files: files}, info: pkg.TypesInfo}}, true, nil //nolint:staticcheck // See loadedPackage.
+	return []loadedPackage{{
+		ast:  &ast.Package{Name: pkg.Name, Files: files}, //nolint:staticcheck // See loadedPackage.
+		info: pkg.TypesInfo, fset: fset, types: pkg.Types,
+	}}, true, nil //nolint:staticcheck // See loadedPackage.
 }
 
 // parseDir parses every non-test file of dir without type information.
@@ -144,7 +149,11 @@ func parseDir(dir string) ([]loadedPackage, error) {
 }
 
 // typeFacts resolves field type facts from type-checked syntax.
-type typeFacts struct{ info *types.Info }
+type typeFacts struct {
+	info  *types.Info
+	fset  *token.FileSet
+	types *types.Package
+}
 
 // TypeFacts reports the facts of expr's type, or false for unknown types and
 // type parameters, whose properties depend on the instantiation.
@@ -171,4 +180,198 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 	}
 
 	return facts, true
+}
+
+const maxSetterResults = 2
+
+// ResolveSetterTarget resolves an optfn function or method and renders its parameter signature.
+func (r typeFacts) ResolveSetterTarget(
+	field ast.Expr,
+	pos token.Pos,
+	expression string,
+	method bool,
+	imports map[string]model.ImportInfo,
+) (model.SetterTarget, error) {
+	if r.types == nil || r.info == nil || r.fset == nil {
+		return model.SetterTarget{}, fmt.Errorf("type information is unavailable")
+	}
+
+	signature, targetPackage, err := r.setterSignature(field, pos, expression, method)
+	if err != nil {
+		return model.SetterTarget{}, err
+	}
+
+	if signature.TypeParams() != nil && signature.TypeParams().Len() > 0 {
+		return model.SetterTarget{}, fmt.Errorf("generic target must be explicitly instantiated")
+	}
+
+	if signature.Results().Len() < 1 || signature.Results().Len() > maxSetterResults {
+		return model.SetterTarget{}, fmt.Errorf("target must return a value and optionally an error")
+	}
+
+	fieldType := r.info.TypeOf(field)
+	if fieldType == nil || hasInvalidType(signature) {
+		return model.SetterTarget{}, fmt.Errorf("target signature contains an unresolved type")
+	}
+
+	resultType := signature.Results().At(0).Type()
+	if !types.AssignableTo(resultType, fieldType) {
+		return model.SetterTarget{}, fmt.Errorf("result is not assignable to field type")
+	}
+
+	returnsError := signature.Results().Len() == maxSetterResults && types.Identical(signature.Results().At(1).Type(), types.Universe.Lookup("error").Type())
+	if signature.Results().Len() == maxSetterResults && !returnsError {
+		return model.SetterTarget{}, fmt.Errorf("second result must be error")
+	}
+
+	target := model.SetterTarget{Expression: expression, Method: method, ReturnsError: returnsError}
+	importsForTarget := newTargetImports(r.types, imports, expression, method, targetPackage)
+	target.Parameters = setterParameters(signature, importsForTarget.qualifier)
+	target.Imports = importsForTarget.imports
+
+	return target, nil
+}
+
+func (r typeFacts) setterSignature(field ast.Expr, pos token.Pos, expression string, method bool) (*types.Signature, *types.Package, error) {
+	if method {
+		fieldType := r.info.TypeOf(field)
+		if fieldType == nil {
+			return nil, nil, fmt.Errorf("field type is unresolved")
+		}
+
+		name := strings.TrimPrefix(expression, ".")
+		obj, _, _ := types.LookupFieldOrMethod(fieldType, true, r.types, name)
+
+		fn, ok := obj.(*types.Func)
+		if !ok {
+			return nil, nil, fmt.Errorf("method %q was not found", name)
+		}
+
+		sig, _ := fn.Type().(*types.Signature)
+
+		return sig, fn.Pkg(), nil
+	}
+
+	value, err := types.Eval(r.fset, r.types, pos, expression)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sig, ok := value.Type.(*types.Signature)
+	if !ok {
+		return nil, nil, fmt.Errorf("target is not a function")
+	}
+
+	return sig, nil, nil
+}
+
+type targetImportResolver struct {
+	imports []model.GeneratedImport
+	aliases map[string]string
+	current string
+}
+
+func newTargetImports(
+	current *types.Package,
+	imports map[string]model.ImportInfo,
+	expression string,
+	method bool,
+	targetPackage *types.Package,
+) targetImportResolver {
+	resolver := targetImportResolver{aliases: make(map[string]string), current: current.Path()}
+
+	for _, imp := range imports {
+		if imp.Alias != "" && imp.Alias != "_" && imp.Alias != "." {
+			resolver.aliases[imp.Path] = imp.Alias
+		}
+	}
+
+	if targetPackage != nil && !method {
+		resolver.qualifier(targetPackage)
+	}
+
+	if targetPackage == nil && !method {
+		prefix, _, ok := strings.Cut(expression, ".")
+		if ok {
+			if imp, found := imports[prefix]; found && imp.Path != "" {
+				alias := imp.Alias
+				if alias == "" {
+					alias = prefix
+				}
+
+				resolver.aliases[imp.Path] = alias
+				resolver.imports = append(resolver.imports, model.GeneratedImport{Path: imp.Path, Alias: alias})
+			}
+		}
+	}
+
+	return resolver
+}
+
+func (r *targetImportResolver) qualifier(pkg *types.Package) string {
+	if pkg == nil || pkg.Path() == r.current {
+		return ""
+	}
+
+	if alias, ok := r.aliases[pkg.Path()]; ok {
+		if !slices.ContainsFunc(r.imports, func(imp model.GeneratedImport) bool { return imp.Path == pkg.Path() }) {
+			r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: alias})
+		}
+
+		return alias
+	}
+
+	alias := pkg.Name()
+	if !slices.ContainsFunc(r.imports, func(imp model.GeneratedImport) bool { return imp.Path == pkg.Path() }) {
+		r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: alias})
+	}
+
+	r.aliases[pkg.Path()] = alias
+
+	return alias
+}
+
+func setterParameters(signature *types.Signature, qualifier types.Qualifier) []model.FuncParameter {
+	params := slices.Collect(signature.Params().Variables())
+
+	out := make([]model.FuncParameter, 0, len(params))
+	for i, param := range params {
+		name := param.Name()
+		if name == "" || name == "_" {
+			name = fmt.Sprintf("arg%d", i)
+		}
+
+		variadic := signature.Variadic() && i == len(params)-1
+
+		paramType := param.Type()
+		if variadic {
+			if sliceType, ok := paramType.(*types.Slice); ok {
+				paramType = sliceType.Elem()
+			}
+		}
+
+		out = append(out, model.FuncParameter{Name: name, Type: types.TypeString(paramType, qualifier), Variadic: variadic})
+	}
+
+	return out
+}
+
+func hasInvalidType(sig *types.Signature) bool {
+	for param := range sig.Params().Variables() {
+		if containsInvalid(param.Type()) {
+			return true
+		}
+	}
+
+	for result := range sig.Results().Variables() {
+		if containsInvalid(result.Type()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsInvalid(t types.Type) bool {
+	return types.TypeString(t, func(*types.Package) string { return "" }) == "invalid type"
 }

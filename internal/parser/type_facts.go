@@ -4,7 +4,12 @@
 
 package parser
 
-import "go/ast"
+import (
+	"go/ast"
+	"go/token"
+
+	"github.com/altessa-s/go-optgen/model"
+)
 
 // TypeFacts are the properties of a resolved field type that plugins rely on.
 type TypeFacts struct {
@@ -19,4 +24,5 @@ type TypeFacts struct {
 // type that failed to type-check; the parser then infers from the syntax.
 type TypeResolver interface {
 	TypeFacts(expr ast.Expr) (TypeFacts, bool)
+	ResolveSetterTarget(field ast.Expr, pos token.Pos, expression string, method bool, imports map[string]model.ImportInfo) (model.SetterTarget, error)
 }
