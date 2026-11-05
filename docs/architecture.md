@@ -79,10 +79,10 @@ by field before rendering because multiple targets can share one field.
 
 The parser extracts every source field into `SourcePackage.StructFields`, including fields skipped with `opt:"-"`; resolved type facts and import
 references allow semantic validation and rendering of `enables` and `resets` targets. The parser also extracts `//optgen:doc` lines from raw comment
-groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. The
-generator validates complete directive docs against the final function name after semantic option-prefix preparation, using the render settings for
-function prefixes. `fieldtmpl` also detects a field doc that starts with that function name and uses it as the complete doc; all field plugins share
-behavior through their common templates.
+groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. Semantic preparation applies the option prefix to directive
+docs, and the generator validates them against the final function name using the render settings for function prefixes. `fieldtmpl` also detects a field
+doc that starts with the full generated function name and uses it as the complete doc; multi-option fields discard a doc that starts with any generated
+function name so it cannot leak to sibling options. All field plugins share this behavior through their common templates.
 
 The source adapter resolves the types and constant status of check expressions and stores only assignability results on each `OptField`. Check plugins
 use those results during semantic preparation to reject bounds and case values that would fail in generated code.

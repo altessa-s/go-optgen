@@ -129,6 +129,17 @@ func TestGenerator_Golden_Collections(t *testing.T) {
 	}
 }
 
+func TestGenerator_CollectionsCombinedOptionModes(t *testing.T) {
+	t.Parallel()
+
+	settings := model.RenderSettings{OptionReturnsError: true, WithIsSet: true}
+	generated := generateStages45(t, settings)
+	require.Contains(t, string(generated), "WithEntries")
+	require.Contains(t, string(generated), "entriesOn = true")
+	require.Contains(t, string(generated), "type optionsFieldSet uint64")
+	typeCheckGenerated(t, "testdata/stages45", generated)
+}
+
 func TestGenerator_CollectionsCloneTiming(t *testing.T) {
 	t.Parallel()
 

@@ -17,6 +17,7 @@ import (
 type SetterFuncPlugin struct{}
 
 const setterFuncPriority = 100
+const setterParameterSuffix = "Arg"
 
 // Meta returns the setter function plugin metadata.
 func (p *SetterFuncPlugin) Meta() plugin.Meta {
@@ -66,11 +67,16 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	}
 
 	used := map[string]bool{"o": true}
+	reserveIdentifiers(used, target.Expression)
 
 	for _, imp := range target.Imports {
 		if imp.Alias != "" {
 			used[imp.Alias] = true
 		}
+	}
+
+	for _, param := range target.Parameters {
+		reserveIdentifiers(used, param.Type)
 	}
 
 	params := make([]string, 0, len(target.Parameters))
@@ -117,13 +123,37 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	return fieldtmpl.Execute(setterFuncTemplate, &data)
 }
 
+func reserveIdentifiers(used map[string]bool, source string) {
+	for i := 0; i < len(source); {
+		if !isIdentifierStart(source[i]) {
+			i++
+			continue
+		}
+
+		start := i
+		for i < len(source) && isIdentifierContinue(source[i]) {
+			i++
+		}
+
+		used[source[start:i]] = true
+	}
+}
+
+func isIdentifierStart(value byte) bool {
+	return value == '_' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
+}
+
+func isIdentifierContinue(value byte) bool {
+	return isIdentifierStart(value) || value >= '0' && value <= '9'
+}
+
 func uniqueParameterName(name string, index int, used map[string]bool) string {
 	if name == "" || name == "_" {
 		name = fmt.Sprintf("arg%d", index)
 	}
 
 	for used[name] {
-		name += "Arg"
+		name += setterParameterSuffix
 	}
 
 	return name
@@ -131,7 +161,7 @@ func uniqueParameterName(name string, index int, used map[string]bool) string {
 
 func uniqueLocalName(name string, used map[string]bool) string {
 	for used[name] {
-		name += "Arg"
+		name += setterParameterSuffix
 	}
 
 	return name

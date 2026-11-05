@@ -104,6 +104,23 @@ func TestExecuteDoesNotReuseFullFieldDocAcrossMultiOptionField(t *testing.T) {
 	require.NotContains(t, out.Code, "WithFirst")
 }
 
+func TestNewBaseDataKeepsOrdinaryMultiOptionDocumentation(t *testing.T) {
+	t.Parallel()
+
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	base := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "routes", OptionName: "Exact", Doc: "With multiple routes configured, each setter updates the table.", Metadata: map[string]string{"multiopt": "true"}})
+	require.Contains(t, base.DocComment, "With multiple routes configured")
+}
+
+func TestNewBaseDataFiltersInvertOptionDoc(t *testing.T) {
+	t.Parallel()
+
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	base := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "second", OptionName: "Second", Doc: "WithoutFirst disables first.", Metadata: map[string]string{"multiopt": "true"}, Modifiers: []string{"invert"}})
+	base.FuncPrefix = "Without"
+	require.NotContains(t, base.DocComment, "WithoutFirst")
+}
+
 func TestResetImportsFollowEmittedPostAssignment(t *testing.T) {
 	t.Parallel()
 

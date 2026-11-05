@@ -24,13 +24,15 @@ func (p *MapPutPlugin) CanHandle(field model.OptField) bool {
 }
 
 var mapPutTemplate = fieldtmpl.Must("map-put", `{{template "optionDoc" .}}
-func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(key {{.MapKeyType}}, value {{.MapValueType}}) {{.OptionType}}{{.TypeParamsNames}} {
+func {{.FuncPrefix}}{{.OptionName}}`+
+	`{{.TypeParamsDecl}}({{.KeyParam}} {{.MapKeyType}}, `+
+	`{{.ValueParam}} {{.MapValueType}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		var zeroKey {{.MapKeyType}}
-		if key == zeroKey { return{{if .OptionReturnsError}} nil{{end}} }
-{{if .MapValueNilable}}		if value == nil { return{{if .OptionReturnsError}} nil{{end}} }
+		if {{.KeyParam}} == zeroKey { return{{if .OptionReturnsError}} nil{{end}} }
+{{if .MapValueNilable}}		if {{.ValueParam}} == nil { return{{if .OptionReturnsError}} nil{{end}} }
 {{end}}		if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
-		{{.MarkSet}}o.{{.FieldName}}[key] = value{{if .PostAssignment}}
+		{{.MarkSet}}o.{{.FieldName}}[{{.KeyParam}}] = {{.ValueParam}}{{if .PostAssignment}}
 		{{.PostAssignment}}{{end}}
 		{{template "optionReturn" .}}
 	}
@@ -40,6 +42,38 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(key {{.MapKeyType}}, valu
 func (p *MapPutPlugin) Generate(ctx plugin.GenerationContext, field model.OptField, _ plugin.Pipeline) (plugin.GeneratedCode, error) {
 	data := fieldtmpl.NewBaseData(ctx, field)
 	data.DocSummary = "adds a " + field.FieldName + " entry."
+	keyParam := uniqueCollectionParameter("key", field.MapKeyType, field.MapValueType, field.Type)
+	valueParam := uniqueCollectionParameter("value", field.MapKeyType, field.MapValueType, field.Type, keyParam)
 
-	return fieldtmpl.Execute(mapPutTemplate, &data)
+	return fieldtmpl.Execute(mapPutTemplate, &struct {
+		fieldtmpl.BaseData
+		KeyParam   string
+		ValueParam string
+	}{BaseData: data, KeyParam: keyParam, ValueParam: valueParam})
+}
+
+func uniqueCollectionParameter(name string, types ...string) string {
+	used := make(map[string]bool)
+
+	for _, typ := range types {
+		for i := 0; i < len(typ); {
+			if !isIdentifierStart(typ[i]) {
+				i++
+				continue
+			}
+
+			start := i
+			for i < len(typ) && isIdentifierContinue(typ[i]) {
+				i++
+			}
+
+			used[typ[start:i]] = true
+		}
+	}
+
+	for used[name] {
+		name += setterParameterSuffix
+	}
+
+	return name
 }

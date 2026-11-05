@@ -5,8 +5,11 @@
 package fields_test
 
 import (
+	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"strings"
 	"testing"
 
@@ -20,6 +23,35 @@ import (
 
 func newCtx(returnsErr bool) plugin.GenerationContext {
 	return plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option", OptionReturnsError: returnsErr}, nil, nil, model.GenericInfo{})
+}
+
+func TestMapCollectionParametersDoNotShadowKeyTypes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		field model.OptField
+		gen   plugin.FieldPlugin
+		src   string
+	}{
+		{name: "put", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[key]int", IsMap: true, MapKeyType: "key", MapValueType: "int", Metadata: map[string]string{"put": "true"}}, gen: &fields.MapPutPlugin{}, src: "package sample\ntype key string\ntype options struct { entries map[key]int }\ntype Option func(*options)\n"},
+		{name: "set", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[v]struct{}", IsMap: true, MapKeyType: "v", Metadata: map[string]string{"set": "true"}}, gen: &fields.MapSetPlugin{}, src: "package sample\ntype v string\ntype options struct { entries map[v]struct{} }\ntype Option func(*options)\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			generated, err := tc.gen.Generate(newCtx(false), tc.field, nil)
+			require.NoError(t, err)
+
+			fset := token.NewFileSet()
+			input, err := parser.ParseFile(fset, "input.go", tc.src, 0)
+			require.NoError(t, err)
+			output, err := parser.ParseFile(fset, "options_gen.go", "package sample\n"+generated.Code, 0)
+			require.NoError(t, err)
+			_, err = (&types.Config{Importer: importer.Default()}).Check("sample", fset, []*ast.File{input, output}, nil)
+			require.NoError(t, err, generated.Code)
+		})
+	}
 }
 
 func genericCtx() plugin.GenerationContext {

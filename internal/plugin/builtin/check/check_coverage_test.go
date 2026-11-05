@@ -196,6 +196,14 @@ func TestMinCheck(t *testing.T) {
 	require.ErrorIs(t, check.Validate(model.OptField{Type: "string"}, "1"), plugin.ErrNotApplicable)
 }
 
+func TestMinCheckInvalidFloatExpressionErrorIsNotIntegerSpecific(t *testing.T) {
+	t.Parallel()
+
+	err := (&check.MinCheck{}).Validate(model.OptField{FieldName: "ratio", Type: "float64", IsNumeric: true}, "1..2")
+	require.ErrorIs(t, err, plugin.ErrInvalidCheckValue)
+	require.NotContains(t, err.Error(), "requires an integer")
+}
+
 func TestNonZeroCheck(t *testing.T) {
 	t.Parallel()
 

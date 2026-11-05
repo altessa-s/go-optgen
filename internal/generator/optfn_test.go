@@ -75,6 +75,39 @@ func TestGeneratorOptfnParameterDoesNotShadowTargetImport(t *testing.T) {
 	require.Contains(t, string(generated), "codec.Parse(codecArg)")
 }
 
+func TestGeneratorOptfnParametersDoNotShadowUnaliasedImportsOrFunctions(t *testing.T) {
+	t.Parallel()
+
+	r := testRegistry()
+	fields := []model.OptField{
+		{FieldName: "value", OptionName: "Value", Type: "string", SetterTarget: &model.SetterTarget{
+			Expression: "fmt.Sprint", Imports: []model.GeneratedImport{{Path: "fmt"}},
+			Parameters: []model.FuncParameter{{Name: "fmt", Type: "string"}},
+		}},
+		{FieldName: "text", OptionName: "Text", Type: "string", SetterTarget: &model.SetterTarget{
+			Expression: "makeText", Parameters: []model.FuncParameter{{Name: "makeText", Type: "string"}},
+		}},
+	}
+	prepared, err := semantic.New(r).Prepare(fields)
+	require.NoError(t, err)
+	generated, err := generator.New(r, plugin.NewPipeline(r)).Generate(model.GenerateInput{
+		TypeName: "options", OptionType: "Option", PackageName: "sample", Fields: prepared,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(generated), "fmtArg string")
+	require.Contains(t, string(generated), "fmt.Sprint(fmtArg)")
+	require.Contains(t, string(generated), "makeTextArg string")
+	require.Contains(t, string(generated), "makeText(makeTextArg)")
+
+	fset := token.NewFileSet()
+	input, err := parser.ParseFile(fset, "input.go", "package sample\ntype options struct { value string; text string }\ntype Option func(*options)\nfunc makeText(makeText string) string { return makeText }", 0)
+	require.NoError(t, err)
+	output, err := parser.ParseFile(fset, "options_gen.go", generated, 0)
+	require.NoError(t, err)
+	_, err = (&types.Config{Importer: importer.Default()}).Check("sample", fset, []*ast.File{input, output}, nil)
+	require.NoError(t, err, "generated setters must type-check with unaliased import and function-name collisions")
+}
+
 func TestGenerator_OptionDocUsesPreparedOptionPrefix(t *testing.T) {
 	t.Parallel()
 
@@ -100,6 +133,23 @@ func TestGenerator_OptionDocUsesPreparedOptionPrefix(t *testing.T) {
 	require.NoError(t, err)
 	compareOptionDocsGolden(t, got, "options_gen_prefix.golden")
 	typeCheckGeneratedSource(t, got)
+}
+
+func TestGeneratorOptfnOptionDocsWithOptionAndFunctionPrefixes(t *testing.T) {
+	t.Parallel()
+
+	r := testRegistry()
+	fields, err := semantic.New(r, semantic.WithPrefix("HTTP")).Prepare([]model.OptField{
+		{FieldName: "header", OptionName: "Header", HasOptionDoc: true, OptionDoc: "SetHeader sets the HTTP header.", Type: "string", SetterTarget: &model.SetterTarget{Expression: "makeHeader", Parameters: []model.FuncParameter{{Name: "value", Type: "string"}}}, Metadata: map[string]string{"multiopt": "true"}},
+		{FieldName: "header", OptionName: "Fallback", HasOptionDoc: true, OptionDoc: "SetFallback sets the fallback header.", Type: "string", SetterTarget: &model.SetterTarget{Expression: "makeHeader", Parameters: []model.FuncParameter{{Name: "value", Type: "string"}}}, Metadata: map[string]string{"multiopt": "true"}},
+	})
+	require.NoError(t, err)
+	got, err := generator.New(r, plugin.NewPipeline(r)).Generate(model.GenerateInput{
+		TypeName: "options", OptionType: "Option", PackageName: "sample", FuncPrefix: "Set", Fields: fields,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(got), "// SetHTTPHeader sets the HTTP header.")
+	require.Contains(t, string(got), "// SetHTTPFallback sets the fallback header.")
 }
 
 func typeCheckGeneratedSource(tb testing.TB, generated []byte) {

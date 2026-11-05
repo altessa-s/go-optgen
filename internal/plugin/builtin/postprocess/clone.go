@@ -5,6 +5,7 @@
 package postprocess
 
 import (
+	"cmp"
 	"slices"
 
 	"github.com/altessa-s/go-optgen/model"
@@ -46,7 +47,7 @@ func (m *CloneModifier) Generate(ctx plugin.GenerationContext, field model.OptFi
 		return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = maps.Clone(" + snapshotVar + ")\n"}
 	}
 
-	if inputVar != "v" {
+	if inputVar != cmp.Or(ctx.InputVar, "v") {
 		return plugin.ModifierResult{OutputVar: inputVar}
 	}
 

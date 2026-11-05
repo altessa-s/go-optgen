@@ -59,7 +59,13 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 			p.warn(fmt.Sprintf("field %s is exported; keep option fields unexported so callers configure through options", f.FieldName))
 		}
 
-		f.OptionName = p.options.prefix + f.OptionName
+		optionName := f.OptionName
+
+		f.OptionName = p.options.prefix + optionName
+		if f.HasOptionDoc && p.options.prefix != "" {
+			f.OptionDoc = prefixOptionDoc(f.OptionDoc, optionName, f.OptionName)
+		}
+
 		if f.Metadata["manual"] != metadataTrue && !f.Mandatory && !f.DefaultOnly && f.OptionName != "" {
 			if previous, exists := optionNames[f.OptionName]; exists {
 				return nil, fmt.Errorf("field %s: duplicate option name %q also used by field %s", f.FieldName, f.OptionName, previous)
@@ -101,6 +107,15 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 	}
 
 	return out, nil
+}
+
+func prefixOptionDoc(doc, oldName, newName string) string {
+	functionName, rest, ok := strings.Cut(doc, " ")
+	if !ok || strings.HasSuffix(functionName, newName) || !strings.HasSuffix(functionName, oldName) {
+		return doc
+	}
+
+	return strings.TrimSuffix(functionName, oldName) + newName + " " + rest
 }
 
 // maxIsSetFields is the capacity of the uint64 field set behind WithIsSet.

@@ -120,7 +120,13 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 	}
 
 	doc := field.Doc
-	if field.Metadata["multiopt"] == "true" && strings.HasPrefix(doc, ctx.OptionFuncPrefix()) {
+
+	functionPrefix := ctx.OptionFuncPrefix()
+	if field.HasModifier("invert") {
+		functionPrefix = ctx.OptionInvertFuncPrefix()
+	}
+
+	if field.Metadata["multiopt"] == "true" && startsWithOptionFunction(doc, functionPrefix) {
 		doc = ""
 	}
 
@@ -139,6 +145,29 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 		DocComment:         docComment(doc),
 		DocSummary:         "sets the " + field.FieldName + " option.",
 	}
+}
+
+func startsWithOptionFunction(doc, prefix string) bool {
+	if !strings.HasPrefix(doc, prefix) {
+		return false
+	}
+
+	rest := strings.TrimPrefix(doc, prefix)
+	for i := 0; i < len(rest); i++ {
+		if rest[i] == ' ' {
+			return i > 0
+		}
+
+		if !optionDocIdentifier(rest[i]) {
+			return false
+		}
+	}
+
+	return false
+}
+
+func optionDocIdentifier(value byte) bool {
+	return value == '_' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' || value >= '0' && value <= '9'
 }
 
 func postAssignment(ctx plugin.GenerationContext, field model.OptField) string {

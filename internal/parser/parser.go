@@ -41,6 +41,10 @@ func derivePackageName(path string) string {
 		pkgName = trimmed
 	}
 
+	if before, after, found := strings.Cut(pkgName, "."); found && isVersionSegment(after) {
+		pkgName = before
+	}
+
 	return pkgName
 }
 
@@ -456,7 +460,17 @@ func checkValueFacts(field *ast.Field, parsed parsedFieldTags, resolver TypeReso
 	facts := make(map[string]bool)
 
 	for _, key := range []string{"min", checkOneOfKey} {
-		value, exists := parsed.Checks[key]
+		var value string
+
+		var exists bool
+
+		for checkKey, checkValue := range parsed.Checks {
+			if strings.EqualFold(checkKey, key) {
+				value, exists = checkValue, true
+				break
+			}
+		}
+
 		if !exists {
 			continue
 		}
@@ -553,6 +567,10 @@ func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed par
 
 	if err := validateCollectionSetterTags(field, parsed, isSet, isPut); err != nil {
 		return err
+	}
+
+	if ctx.hasOptfn && len(field.Names) > 1 {
+		return fmt.Errorf("field %s: optfn cannot be used with multiple field names", fieldName)
 	}
 
 	if err := validateOptfnTags(fieldName, ctx, parsed); err != nil {
@@ -665,6 +683,10 @@ func validateCloneType(fieldName string, fieldType ast.Expr, modifiers []string)
 func validateOptfnTags(fieldName string, ctx fieldProcessingContext, parsed parsedFieldTags) error {
 	if !ctx.hasOptfn {
 		return nil
+	}
+
+	if len(parsed.SetterTargets) > 0 && strings.TrimSpace(ctx.tag) != "" {
+		return fmt.Errorf("field %s: optfn cannot be combined with opt", fieldName)
 	}
 
 	if _, exists := LookupTag(ctx.tagStr, "optval"); exists {

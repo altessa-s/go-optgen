@@ -57,7 +57,9 @@ type options struct {
 }
 ```
 
-The final name includes `--option-prefix` and the function prefix configured by `--func-prefix`; inverted bool options use `--invert-func-prefix`.
+The directive option name matches the field's unprefixed option name. Its function name may use that name or the final name after `--option-prefix`;
+semantic preparation applies the option prefix when needed. The function prefix comes from `--func-prefix`; inverted bool options use
+`--invert-func-prefix`.
 
 ## Option naming
 

@@ -27,13 +27,13 @@ func (p *MapSetPlugin) CanHandle(field model.OptField) bool {
 
 var mapSetTemplate = fieldtmpl.Must("map-set", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(
-	v {{if .SliceParam}}[]{{.MapKeyType}}{{else}}...{{.MapKeyType}}{{end}},
+	{{.ValuesParam}} {{if .SliceParam}}[]{{.MapKeyType}}{{else}}...{{.MapKeyType}}{{end}},
 ) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
-{{if .Append}}        if len(v) == 0 { return{{if .OptionReturnsError}} nil{{end}} }
+{{if .Append}}        if len({{.ValuesParam}}) == 0 { return{{if .OptionReturnsError}} nil{{end}} }
         if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
-{{else}}        o.{{.FieldName}} = make({{.Type}}, len(v))
-{{end}}        for _, key := range v { o.{{.FieldName}}[key] = struct{}{} }
+{{else}}        o.{{.FieldName}} = make({{.Type}}, len({{.ValuesParam}}))
+{{end}}        for _, key := range {{.ValuesParam}} { o.{{.FieldName}}[key] = struct{}{} }
         {{.PostAssignment}}{{.MarkSet}}{{template "optionReturn" .}}
 	}
 }`)
@@ -45,6 +45,7 @@ func (p *MapSetPlugin) Generate(ctx plugin.GenerationContext, field model.OptFie
 
 	return fieldtmpl.Execute(mapSetTemplate, &struct {
 		fieldtmpl.BaseData
-		Append bool
-	}{BaseData: data, Append: plugin.IsTruthyMetadata(field.Metadata, "append")})
+		Append      bool
+		ValuesParam string
+	}{BaseData: data, Append: plugin.IsTruthyMetadata(field.Metadata, "append"), ValuesParam: uniqueCollectionParameter("v", field.MapKeyType, field.Type)})
 }
