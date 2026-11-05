@@ -22,7 +22,7 @@ flowchart TD
 
 | Package | Responsibility | Allowed inner dependencies |
 |---------|----------------|----------------------------|
-| `model` | Generation data, field declarations and option docs, import information, resolved setter signatures and map entry facts | Standard library |
+| `model` | Generation data, field declarations and option docs, all source struct fields and their type facts, import information, resolved setter signatures and map entry facts | Standard library |
 | `plugin` | Extension contracts, explicit catalogs, pipeline execution | `model` |
 | `internal/application` | Parse, prepare, render, publish through ports | `model` |
 | `internal/parser` | Extract syntax without applying plugin policies; resolves `optfn` targets and map entry facts through the type resolver port | `model`, `internal/naming` |
@@ -57,6 +57,8 @@ flowchart TD
 | Generated constructor options | Package tunables follow the same option conventions as generated consumers. |
 | Settings verified by the use case | `RenderSettings.Verify` runs in `application.Service`, so every caller, not only the CLI, rejects unknown modes. |
 | Default normalization through plugins | Type-specific rewriting of tag defaults (e.g. `30s` for `time.Duration`) is a `DefaultNormalizer` hook, not a semantic branch. |
+| Check bound normalization through plugins | Numeric check bounds use the field type's `DefaultNormalizer` (e.g. `1s` for `time.Duration`) before check validation and rendering. |
+| Cross-field option updates | `enables` and `resets` are validated against `SourcePackage.StructFields` and rendered by shared field templates after assignment. |
 | Collection cloning after post-processing | Clone modifiers run after all value transforms and post-processors. Eager snapshots are emitted by field templates before closure creation. |
 
 ## Plugin contracts
@@ -74,7 +76,9 @@ and methods with `types.LookupFieldOrMethod`; the model carries only signature s
 rendered key and value types plus value nilability for put setters. Function-backed setters do not build the value pipeline. Defaults are deduplicated
 by field before rendering because multiple targets can share one field.
 
-The parser extracts `//optgen:doc` lines from raw comment groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. The
+The parser extracts every source field into `SourcePackage.StructFields`, including fields skipped with `opt:"-"`; resolved type facts and import
+references allow semantic validation and rendering of `enables` and `resets` targets. The parser also extracts `//optgen:doc` lines from raw comment
+groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. The
 generator validates complete directive docs against the final function name after semantic option-prefix preparation, using the render settings for
 function prefixes. `fieldtmpl` also detects a field doc that starts with that function name and uses it as the complete doc; all field plugins share
 behavior through their common templates.

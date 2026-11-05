@@ -94,13 +94,13 @@ type TypeDefaultPlugin interface {
 }
 
 // DefaultNormalizer is an optional extension of [TypeDefaultPlugin]: it
-// rewrites an explicit tag default of a type it understands into a Go
-// expression (e.g. "30s" for time.Duration -> "30 * time.Second"). The
+// rewrites an explicit tag default or optcheck bound of a type it understands
+// into a Go expression (e.g. "30s" for time.Duration -> "30 * time.Second"). The
 // [Registry] asks enabled type-default plugins in descending priority order
 // and uses the first rewrite; a plugin may report false from CanProvideDefault
-// and still normalize explicit defaults.
+// and still normalize explicit defaults and check bounds.
 type DefaultNormalizer interface {
-	// NormalizeDefault returns the rewritten default and true, or false to
-	// leave def to the next plugin.
+	// NormalizeDefault returns the rewritten default or check bound and true,
+	// or false to leave def to the next plugin.
 	NormalizeDefault(typeStr, def string) (string, bool)
 }

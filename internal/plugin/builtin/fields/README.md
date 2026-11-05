@@ -31,3 +31,6 @@ See [architecture](../../../../docs/architecture.md) for dependency rules and [p
 
 `set` and `put` map fields bypass the value modifier pipeline. `set` accepts `map[K]struct{}` and inserts keys; add `append` to accumulate keys
 instead of replacing the map. `put` accepts any map and lazily creates it when adding its first entry.
+
+`optgen:"enables=field"` sets a bool field to true after the main assignment. `optgen:"resets=a|b"` assigns each target its zero value. These
+updates are emitted by shared field templates for every built-in field plugin and run only after guards allow the assignment.

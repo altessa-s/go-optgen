@@ -66,7 +66,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v ...string) {{.OptionTyp
 		{{- else}}
 		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
 		{{- end}}
-{{- end}}{{- template "optionReturn" . }}
+		{{- if .PostAssignment}}{{.PostAssignment}}{{- end}}{{- end}}{{- template "optionReturn" . }}
 	}
 }`)
 

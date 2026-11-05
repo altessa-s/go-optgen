@@ -108,6 +108,10 @@ const maxIsSetFields = 64
 // settings' policies: [model.DefaultsFromNone] drops every default, and
 // WithIsSet requires a FieldSet field and at most 64 fields.
 func (p *Preparer) PrepareInput(in model.GenerateInput) (model.GenerateInput, error) {
+	if err := validateFieldRelations(in.Fields, in.StructFields); err != nil {
+		return model.GenerateInput{}, err
+	}
+
 	fields, err := p.Prepare(in.Fields)
 	if err != nil {
 		return model.GenerateInput{}, err
@@ -156,6 +160,11 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 		}
 
 		value := f.Checks[key]
+		if strings.EqualFold(key, "min") {
+			value = p.catalog.NormalizeDefault(f.Type, value)
+			checks[key] = value
+		}
+
 		if spec.RequiresValue && (f.BareChecks[key] || strings.TrimSpace(value) == "") {
 			return fmt.Errorf("field %s: optcheck %s requires a value", f.FieldName, key)
 		}
@@ -174,6 +183,84 @@ func (p *Preparer) warn(msg string) {
 	if p.options.warningSink != nil {
 		p.options.warningSink(msg)
 	}
+}
+
+func validateFieldRelations(fields []model.OptField, structFields []model.StructField) error {
+	byName := make(map[string]model.StructField, len(structFields))
+	for _, field := range structFields {
+		byName[field.Name] = field
+	}
+
+	for _, field := range fields {
+		if err := validateFieldRelationsForOne(field, byName); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateFieldRelationsForOne(field model.OptField, byName map[string]model.StructField) error {
+	if value, exists := field.Metadata["onfail"]; exists && value != "skip" {
+		return fmt.Errorf("field %s: optgen onfail value %q is invalid (want skip)", field.FieldName, value)
+	}
+
+	enables := strings.TrimSpace(field.Metadata["enables"])
+
+	resets := splitResetFields(field.Metadata["resets"])
+	if _, exists := field.Metadata["enables"]; exists && enables == "" {
+		return fmt.Errorf("field %s: optgen enables requires a field name", field.FieldName)
+	}
+
+	if _, exists := field.Metadata["resets"]; exists && slices.Contains(resets, "") {
+		return fmt.Errorf("field %s: optgen resets requires non-empty field names", field.FieldName)
+	}
+
+	if enables != "" && slices.Contains(resets, enables) {
+		return fmt.Errorf("field %s: optgen field %s cannot be both enabled and reset", field.FieldName, enables)
+	}
+
+	for _, target := range append(slices.Clone(resets), enables) {
+		if target == "" {
+			continue
+		}
+
+		if err := validateFieldRelationTarget(field, target, enables, byName); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateFieldRelationTarget(field model.OptField, target, enables string, byName map[string]model.StructField) error {
+	if target == field.FieldName {
+		return fmt.Errorf("field %s: optgen cannot enable or reset itself", field.FieldName)
+	}
+
+	fact, ok := byName[target]
+	if !ok {
+		return fmt.Errorf("field %s: optgen target %s does not exist", field.FieldName, target)
+	}
+
+	if target == enables && fact.Type != "bool" && !fact.IsBool {
+		return fmt.Errorf("field %s: optgen enables target %s must be bool", field.FieldName, target)
+	}
+
+	return nil
+}
+
+func splitResetFields(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, "|")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+
+	return parts
 }
 
 // modifierPolicy resolves the modifiers that transform and modifier plugins
@@ -213,6 +300,10 @@ func (p modifierPolicy) modifiers(f model.OptField) []string {
 	existing := slices.Clone(f.Modifiers)
 	for key := range f.Metadata {
 		existing = append(existing, key)
+	}
+
+	if _, hasMin := f.Checks["min"]; hasMin {
+		existing = append(existing, "positive")
 	}
 
 	var defaults []string

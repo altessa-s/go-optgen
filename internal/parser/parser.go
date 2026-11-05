@@ -61,10 +61,11 @@ func isVersionSegment(s string) bool {
 
 // FindOptFieldsResult contains the result of parsing opt fields from a struct.
 type FindOptFieldsResult struct {
-	Fields      []model.OptField            // Parsed fields with opt tags
-	Imports     map[string]model.ImportInfo // Import alias to ImportInfo mapping
-	GenericInfo model.GenericInfo           // Generic type parameters if the struct is generic
-	IsSetField  string                      // Field of type <TypeName>FieldSet recording applied options
+	Fields       []model.OptField // Parsed fields with opt tags
+	StructFields []model.StructField
+	Imports      map[string]model.ImportInfo // Import alias to ImportInfo mapping
+	GenericInfo  model.GenericInfo           // Generic type parameters if the struct is generic
+	IsSetField   string                      // Field of type <TypeName>FieldSet recording applied options
 }
 
 // FindOptFields finds all fields with opt tags in the specified struct type.
@@ -122,11 +123,13 @@ func FindOptFields(pkg *ast.Package, typeName string, processAllFields bool, typ
 
 			// Process each field in the struct
 			for _, field := range st.Fields.List {
-				// The field set records applied options; it is not an option.
-				if TypeToString(field.Type) == typeName+"FieldSet" && len(field.Names) == 1 {
-					result.IsSetField = field.Names[0].Name
+				if recordFieldSet(&result, field, typeName) {
+					appendStructFields(&result, field, types)
+
 					continue
 				}
+
+				appendStructFields(&result, field, types)
 
 				optFields, err := processStructField(field, processAllFields, result.Imports, types)
 				if err != nil {
@@ -150,6 +153,53 @@ func FindOptFields(pkg *ast.Package, typeName string, processAllFields bool, typ
 	sortOptFields(result.Fields)
 
 	return result, parseErr
+}
+
+func recordFieldSet(result *FindOptFieldsResult, field *ast.Field, typeName string) bool {
+	if TypeToString(field.Type) != typeName+"FieldSet" || len(field.Names) != 1 {
+		return false
+	}
+
+	result.IsSetField = field.Names[0].Name
+
+	return true
+}
+
+func appendStructFields(result *FindOptFieldsResult, field *ast.Field, resolver TypeResolver) {
+	names := field.Names
+	if len(names) == 0 {
+		if name := embeddedFieldName(field.Type); name != "" {
+			names = []*ast.Ident{ast.NewIdent(name)}
+		}
+	}
+
+	facts, resolved := TypeFacts{}, false
+	if resolver != nil {
+		facts, resolved = resolver.TypeFacts(field.Type)
+	}
+
+	for _, name := range names {
+		result.StructFields = append(result.StructFields, model.StructField{
+			Name: name.Name, Type: TypeToString(field.Type), TypeResolved: resolved,
+			TypeImports: ExtractImportsFromType(field.Type, result.Imports),
+			IsBool:      resolved && facts.Bool, IsNumeric: resolved && facts.Numeric,
+			IsComparable: resolved && facts.Comparable, IsInterface: resolved && facts.Interface,
+			IsNilable: resolved && facts.Nilable,
+		})
+	}
+}
+
+func embeddedFieldName(expr ast.Expr) string {
+	switch typ := expr.(type) {
+	case *ast.Ident:
+		return typ.Name
+	case *ast.SelectorExpr:
+		return typ.Sel.Name
+	case *ast.StarExpr:
+		return embeddedFieldName(typ.X)
+	default:
+		return ""
+	}
 }
 
 // collectFileImports extracts import information from a file's imports.
@@ -493,7 +543,7 @@ func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed par
 	}
 
 	for key := range parsed.Metadata {
-		if key != "manual" {
+		if key != "manual" && key != "enables" && key != "resets" {
 			return fmt.Errorf("field %s: optfn cannot be combined with optgen modifier %q", fieldName, key)
 		}
 	}

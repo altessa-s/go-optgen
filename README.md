@@ -13,9 +13,9 @@ extensible plugin system.
 | Tag        | Purpose                                                                          |
 |------------|----------------------------------------------------------------------------------|
 | `opt`      | Option name for the `WithXxx` function; use `-` to skip generation. Omit it to derive the name from the field (see [Option naming](#option-naming)) |
-| `optgen`   | Generator directives: `default=...`, `append`, `set`, `put`, `notnil`, `manual`, `parseip`, `err=...` |
+| `optgen`   | Generator directives: `default=...`, `append`, `set`, `put`, `enables=field`, `resets=a|b`, `onfail=skip`, `notnil`, `manual`, `parseip`, `err=...` |
 | `optval`   | Value modifiers: `trimspaces`, `lower`, `upper`, `trimprefix=...`, `trimsuffix=...`, `dedup`, `clone[=eager]`, `nonempty`, `positive`; `invert` / `param` for bool fields. `trimspaces` applies to string fields by default; `notrim` disables it |
-| `optcheck` | Validation rules: `required`, `nonzero`, `minlen=N`, `maxlen=N`, `oneof=[a,b,c]`|
+| `optcheck` | Validation rules: `required`, `nonzero`, `min=N`, `minlen=N`, `maxlen=N`, `oneof=[a,b,c]` |
 | `optfn`    | Setter targets as `OptionName=Function` or `OptionName=.Method`; target signatures supply parameters |
 
 ## Function-backed setters
@@ -32,6 +32,13 @@ type options struct {
 ```
 
 Target parameter types and variadic behavior come from Go type information. `optfn` fields cannot use `opt:"-"`, `optval`, or `optcheck`.
+
+`oneof` treats unquoted values on `string` fields as string literals. For other comparable fields, unquoted values must be Go identifiers or qualified
+constants. `min` accepts numeric fields and `time.Duration`; a field with `optcheck:"min=..."` does not receive the default `positive` modifier.
+`optgen:"onfail=skip"` makes a failed check a no-op in the option function, including when options return errors.
+
+`optgen:"enables=flagField"` sets a bool field after the option assignment. `optgen:"resets=a|b"` resets listed fields after assignment. Guards that
+return early skip these updates.
 
 ## Documentation
 

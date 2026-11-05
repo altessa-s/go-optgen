@@ -15,7 +15,7 @@ generator can implement extensions with stable interfaces; the `optgen` CLI regi
 | `TransformPlugin`  | Applies a single `optval` modifier (e.g. `lower`, `trimspaces`) to an expression         |
 | `ModifierPlugin`   | Pipeline modifier selected by `optgen`/`optval` keys (guards, post-processing)           |
 | `TypeDefaultPlugin`| Supplies a default-value expression for a field type when none is specified               |
-| `DefaultNormalizer`| Optional `TypeDefaultPlugin` extension: rewrites an explicit tag default into Go code      |
+| `DefaultNormalizer`| Optional `TypeDefaultPlugin` extension: rewrites explicit defaults and check bounds into Go code |
 | `CheckPlugin`      | Generates validation code for an `optcheck` key (e.g. `required`, `minlen`)              |
 | `PluginMeta`       | Provides `Meta() Meta`; embedded by every plugin contract                                 |
 
@@ -26,7 +26,7 @@ generator can implement extensions with stable interfaces; the `optgen` CLI regi
 | Guard          | 1     | Pre-assignment checks (e.g. `notnil`)                                                |
 | Transform      | 2     | Value transformations (e.g. `lower`, `trimspaces`, `trimprefix`)                     |
 | PostProcess    | 3     | Final cleanup after transforms (e.g. `dedup`, `positive`, `nonempty`)                |
-| Check          | 4     | Validation (e.g. `required`, `minlen`, `maxlen`, `oneof`)                            |
+| Check          | 4     | Validation (e.g. `required`, `min`, `minlen`, `maxlen`, `oneof`)                     |
 
 ## Registration
 
@@ -52,6 +52,9 @@ generation; conditional runtime guards leave it false. See [architecture](../doc
 `CheckPlugin.Validate` runs during semantic preparation and rejects a field type the check cannot handle (`ErrNotApplicable`) or an unusable value
 (`ErrInvalidCheckValue`), so a declared check never silently generates nothing. A check of a disabled plugin is dropped with a warning.
 `ValueKindOf` classifies field types for checks; `BuildNilCheck` emits a reflect-based nil test that compiles for any type.
+
+`DefaultNormalizer.NormalizeDefault` also normalizes bound expressions supplied to checks such as `min`; duration plugins can rewrite `1s` into a Go
+expression before the check validates and renders it.
 
 ## Constructor options
 

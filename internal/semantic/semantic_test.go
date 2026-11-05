@@ -64,6 +64,48 @@ func TestPrepareCopiesFieldsAndRespectsDisabledDefaults(t *testing.T) {
 	require.Empty(t, prepared[0].Modifiers, "disabler keys are removed even when their plugin is disabled")
 }
 
+func TestPrepareNormalizesMinAndSuppressesDurationPositiveDefault(t *testing.T) {
+	t.Parallel()
+	r := builtinRegistry(t)
+	prepared, err := semantic.New(r).Prepare([]model.OptField{{FieldName: "timeout", Type: "time.Duration", IsNumeric: true,
+		Checks: map[string]string{"min": "1s"}}})
+	require.NoError(t, err)
+	require.Equal(t, "1 * time.Second", prepared[0].Checks["min"])
+	require.NotContains(t, prepared[0].Modifiers, "positive")
+}
+
+func TestPrepareInputValidatesEnablesAndResets(t *testing.T) {
+	t.Parallel()
+	r := builtinRegistry(t)
+	base := model.GenerateInput{
+		Fields:       []model.OptField{{FieldName: "enabled", Type: "bool", Metadata: map[string]string{"enables": "active", "resets": "pointer|callback"}}},
+		StructFields: []model.StructField{{Name: "active", Type: "bool", IsBool: true}, {Name: "pointer", Type: "*int"}, {Name: "callback", Type: "func()"}},
+	}
+	_, err := semantic.New(r).PrepareInput(base)
+	require.NoError(t, err)
+
+	cases := []struct {
+		name    string
+		field   model.OptField
+		structs []model.StructField
+		want    string
+	}{
+		{name: "unknown", field: model.OptField{FieldName: "x", Metadata: map[string]string{"enables": "missing"}}, want: "does not exist"},
+		{name: "not bool", field: model.OptField{FieldName: "x", Metadata: map[string]string{"enables": "target"}}, structs: []model.StructField{{Name: "target", Type: "int"}}, want: "must be bool"},
+		{name: "both", field: model.OptField{FieldName: "x", Metadata: map[string]string{"enables": "target", "resets": "target"}}, structs: []model.StructField{{Name: "target", Type: "bool"}}, want: "both enabled and reset"},
+		{name: "self", field: model.OptField{FieldName: "x", Metadata: map[string]string{"resets": "x"}}, structs: []model.StructField{{Name: "x", Type: "int"}}, want: "cannot enable or reset itself"},
+		{name: "onfail invalid", field: model.OptField{FieldName: "x", Metadata: map[string]string{"onfail": "panic"}}, want: "onfail value"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := semantic.New(r).PrepareInput(model.GenerateInput{Fields: []model.OptField{tc.field}, StructFields: tc.structs})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 // TestOptcheckKeysDoNotResolveModifiers pins that a modifier key is not a
 // valid optcheck key: checks resolve through check plugins only.
 func TestOptcheckKeysDoNotResolveModifiers(t *testing.T) {
@@ -96,7 +138,7 @@ func TestPrepareRejectsInapplicableChecks(t *testing.T) {
 		{"minlen on int", model.OptField{FieldName: "n", Type: "int", Checks: map[string]string{"minlen": "3"}}, plugin.ErrNotApplicable},
 		{"required on bool", model.OptField{FieldName: "b", Type: "bool", Checks: map[string]string{"required": ""}}, plugin.ErrNotApplicable},
 		{"nonzero on string", model.OptField{FieldName: "s", Type: "string", Checks: map[string]string{"nonzero": ""}}, plugin.ErrNotApplicable},
-		{"oneof on int", model.OptField{FieldName: "n", Type: "int", Checks: map[string]string{"oneof": "a"}}, plugin.ErrNotApplicable},
+		{"oneof on slice", model.OptField{FieldName: "n", Type: "[]int", IsSlice: true, Checks: map[string]string{"oneof": "a"}}, plugin.ErrNotApplicable},
 		{"empty oneof list", model.OptField{FieldName: "s", Type: "string", Checks: map[string]string{"oneof": "[]"}}, plugin.ErrInvalidCheckValue},
 		{"required on named interface", model.OptField{FieldName: "w", Type: "io.Writer", Checks: map[string]string{"required": ""}}, nil},
 	} {

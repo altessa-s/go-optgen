@@ -22,6 +22,7 @@ import (
 	"github.com/altessa-s/go-optgen/internal/generator"
 	"github.com/altessa-s/go-optgen/internal/plugin/builtin"
 	"github.com/altessa-s/go-optgen/internal/semantic"
+	"github.com/altessa-s/go-optgen/internal/source"
 	"github.com/altessa-s/go-optgen/model"
 	"github.com/altessa-s/go-optgen/plugin"
 
@@ -36,6 +37,75 @@ func TestGenerator_Golden_Default(t *testing.T) {
 func TestGenerator_Golden_OptionError(t *testing.T) {
 	t.Parallel()
 	runGeneratorGolden(t, true, "testdata/basic", "basic", "options_gen_error.golden")
+}
+
+func TestGenerator_Golden_Stages45(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		settings model.RenderSettings
+		golden   string
+	}{
+		{name: "default", golden: "options_gen.golden"},
+		{name: "option error", settings: model.RenderSettings{OptionReturnsError: true}, golden: "options_gen_error.golden"},
+		{name: "check failure skip", settings: model.RenderSettings{CheckFailure: model.CheckFailureSkip}, golden: "options_gen_skip.golden"},
+		{name: "with isset", settings: model.RenderSettings{WithIsSet: true}, golden: "options_gen_isset.golden"},
+		{name: "validate", settings: model.RenderSettings{Validate: true}, golden: "options_gen_validate.golden"},
+		{name: "validate option error", settings: model.RenderSettings{Validate: true, OptionReturnsError: true}, golden: "options_gen_validate_error.golden"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := generateStages45(t, tc.settings)
+			typeCheckGenerated(t, "testdata/stages45", got)
+
+			goldenPath := filepath.Join(filepath.Dir(testFile(t)), "testdata/stages45", tc.golden)
+			if os.Getenv("UPDATE_GOLDEN") == "1" {
+				require.NoError(t, os.WriteFile(goldenPath, got, 0o644))
+			}
+
+			want, err := os.ReadFile(goldenPath)
+			require.NoError(t, err)
+			require.Equal(t, string(want), string(got))
+		})
+	}
+}
+
+func generateStages45(tb testing.TB, settings model.RenderSettings) []byte {
+	tb.Helper()
+	dir := filepath.Join(filepath.Dir(testFile(tb)), "testdata/stages45")
+	packages, err := (source.Reader{}).Parse(tb.Context(), dir, "options", false)
+	require.NoError(tb, err)
+	require.Len(tb, packages, 1)
+	pkg := packages[0]
+	settings.TypeName = "options"
+	r := testRegistry()
+	prepared, err := semantic.New(r).PrepareInput(model.GenerateInput{
+		RenderSettings: settings, Fields: pkg.Fields, StructFields: pkg.StructFields,
+		IsSetField: pkg.IsSetField, GenericInfo: pkg.GenericInfo,
+	})
+	require.NoError(tb, err)
+
+	in := model.GenerateInput{
+		RenderSettings: settings, PackageName: pkg.Name, Fields: prepared.Fields, StructFields: prepared.StructFields,
+		Imports: pkg.Imports, GenericInfo: pkg.GenericInfo, IsSetField: pkg.IsSetField,
+	}
+	in.OptionType = "Option"
+	in.GenerateOptionType, in.GenerateDefaultFunc, in.GenerateNewFunc = true, true, true
+	in.DefaultFuncName, in.NewFuncName = "defaultOptions", "newOptions"
+	got, err := generator.New(r, plugin.NewPipeline(r)).Generate(in)
+	require.NoError(tb, err)
+
+	return got
+}
+
+func testFile(tb testing.TB) string {
+	tb.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	require.True(tb, ok)
+
+	return file
 }
 
 func TestGenerator_Golden_Collections(t *testing.T) {

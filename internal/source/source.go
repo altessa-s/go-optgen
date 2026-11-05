@@ -81,8 +81,10 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 			return nil, err
 		}
 
-		out = append(out, model.SourcePackage{Name: pkg.ast.Name, Fields: result.Fields, Imports: result.Imports, GenericInfo: result.GenericInfo,
-			NormalizationMethod: normalization, IsSetField: result.IsSetField, Fset: pkg.fset, Types: pkg.types})
+		out = append(out, model.SourcePackage{
+			Name: pkg.ast.Name, Fields: result.Fields, StructFields: result.StructFields, Imports: result.Imports, GenericInfo: result.GenericInfo,
+			NormalizationMethod: normalization, IsSetField: result.IsSetField, Fset: pkg.fset, Types: pkg.types,
+		})
 	}
 
 	return out, nil
@@ -167,7 +169,10 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 		return optparser.TypeFacts{}, false
 	}
 
-	facts := optparser.TypeFacts{Interface: types.IsInterface(t), Comparable: types.Comparable(t)}
+	facts := optparser.TypeFacts{
+		Interface: types.IsInterface(t), Comparable: types.Comparable(t),
+		Bool: types.Identical(types.Unalias(t).Underlying(), types.Typ[types.Bool]),
+	}
 	switch u := t.Underlying().(type) {
 	case *types.Map:
 		facts.Nilable = true

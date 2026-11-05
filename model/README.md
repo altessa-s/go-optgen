@@ -21,6 +21,7 @@ package rather than any internal package to access the types they receive and pr
 | `TypeParam`       | A single type parameter (`Name`, `Constraint`) of a generic option struct                   |
 | `SetterTarget` | Resolved function or method used by an `optfn` option, including its generated signature and imports |
 | `FuncParameter` | Parameter name, type, and variadic flag from a resolved target signature |
+| `StructField` | Source field declaration and resolved type facts, including fields omitted from option generation |
 
 ## OptField fields
 
@@ -51,3 +52,6 @@ package rather than any internal package to access the types they receive and pr
 | `Mandatory`    | `optgen:"mandatory"`: a parameter of the generated constructor instead of a `WithXxx` option  |
 | `DefaultOnly`  | Include the field in `defaultOptions()` but skip `WithXxx` generation                         |
 | `SetterTarget` | Resolved target for an `optfn` setter; nil for ordinary field plugins |
+
+`SourcePackage` and `GenerateInput` also carry `StructFields`, which preserves the names, source type strings, imports, and resolved type facts for every
+field in the options struct, including fields skipped by `opt:"-"`. Semantic preparation uses these declarations to validate `enables` and `resets`.

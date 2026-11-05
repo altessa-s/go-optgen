@@ -28,6 +28,12 @@ type GenerationContext struct {
 
 	// AllFields contains all fields being generated.
 	AllFields []model.OptField
+	// StructFields contains every source struct field, including fields without generated options.
+	StructFields []model.StructField
+	// ValidationOnly identifies checks emitted in the generated validate method.
+	ValidationOnly bool
+	// OnFailSkip selects a no-op return for a failed option-body check.
+	OnFailSkip bool
 
 	// Imports contains all imports available in the source file.
 	// Map key is the package alias, value is import info.

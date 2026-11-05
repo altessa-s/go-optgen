@@ -14,6 +14,9 @@ func Register(r *plugin.Registry) error {
 		&MinLenCheck{
 			CheckBase: plugin.NewCheckBase("minlen", minlenPriority, plugin.WithRequiresValue(true)),
 		},
+		&MinCheck{
+			CheckBase: plugin.NewCheckBase("min", minPriority, plugin.WithRequiresValue(true)),
+		},
 		&NonZeroCheck{
 			CheckBase: plugin.NewCheckBase("nonzero", nonzeroPriority),
 		},

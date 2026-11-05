@@ -145,7 +145,9 @@ func (r *Executor) checkValue(ctx GenerationContext, field model.OptField, value
 
 	lines := make([]string, 0, 3*len(checks))
 	for _, c := range checks {
-		lines = append(lines, c.plugin.Generate(ctx, field, value, field.Checks[c.key])...)
+		checkCtx := ctx
+		checkCtx.OnFailSkip = field.Metadata["onfail"] == "skip"
+		lines = append(lines, c.plugin.Generate(checkCtx, field, value, field.Checks[c.key])...)
 	}
 
 	return lines

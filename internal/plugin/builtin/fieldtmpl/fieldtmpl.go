@@ -103,6 +103,7 @@ type BaseData struct {
 	SliceParam         bool   // Slice options take a slice instead of variadic elements
 	PreClosureCode     string // Code that snapshots option inputs before returning the closure
 	MarkSet            string // Statement recording the applied option, or empty
+	PostAssignment     string // Enables and resets rendered after the assigned value
 	DocComment         string // Field documentation as comment lines following the summary, or empty
 	FullDocComment     string // Complete option documentation, or empty for the generated summary
 	DocSummary         string // Generated summary after the function name
@@ -110,6 +111,15 @@ type BaseData struct {
 
 // NewBaseData collects the template data for field from ctx.
 func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
+	mark := markSet(ctx, field)
+
+	post := postAssignment(ctx, field)
+
+	if post != "" {
+		post += mark
+		mark = ""
+	}
+
 	return BaseData{
 		OptField:           field,
 		TypeName:           ctx.TypeName,
@@ -120,10 +130,42 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 		FuncPrefix:         ctx.OptionFuncPrefix(),
 		KeepEmptyStrings:   ctx.KeepEmptyStrings,
 		SliceParam:         ctx.SliceSetter == model.SliceSetterSlice,
-		MarkSet:            markSet(ctx, field),
+		MarkSet:            mark,
+		PostAssignment:     post,
 		DocComment:         docComment(field.Doc),
 		DocSummary:         "sets the " + field.FieldName + " option.",
 	}
+}
+
+func postAssignment(ctx plugin.GenerationContext, field model.OptField) string {
+	var b strings.Builder
+
+	if target := strings.TrimSpace(field.Metadata["enables"]); target != "" {
+		fmt.Fprintf(&b, "\t\to.%s = true\n", target)
+	}
+
+	for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
+		target = strings.TrimSpace(target)
+		if target != "" {
+			fmt.Fprintf(&b, "\t\to.%s = *new(%s)\n", target, structFieldType(ctx, target))
+		}
+	}
+
+	if b.Len() == 0 {
+		return ""
+	}
+
+	return b.String()
+}
+
+func structFieldType(ctx plugin.GenerationContext, name string) string {
+	for _, target := range ctx.StructFields {
+		if target.Name == name {
+			return target.Type
+		}
+	}
+
+	return "any"
 }
 
 // docComment renders doc as a separate paragraph of the option function's

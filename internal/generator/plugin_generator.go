@@ -24,6 +24,7 @@ import (
 func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	ctx := plugin.NewGenerationContext(in.PackageName, in.RenderSettings, in.Fields, in.Imports, in.GenericInfo)
 	ctx.IsSetField = in.IsSetField
+	ctx.StructFields = in.StructFields
 
 	type funcOut struct {
 		fieldName  string
@@ -79,6 +80,8 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		typeDefs = append(typeDefs, result.TypeDefs...)
 		helpers = append(helpers, result.Helpers...)
 	}
+
+	addResetImports(in, addImport)
 
 	validation := g.validationCode(ctx, in)
 	defaultFields := fieldsForDefaults(in.Fields)
@@ -185,6 +188,23 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	return g.renderPluginTemplate(data)
 }
 
+func addResetImports(in model.GenerateInput, addImport func(model.GeneratedImport)) {
+	fieldsByName := make(map[string]model.StructField, len(in.StructFields))
+	for _, field := range in.StructFields {
+		fieldsByName[field.Name] = field
+	}
+
+	for _, field := range in.Fields {
+		for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
+			if resetField, ok := fieldsByName[strings.TrimSpace(target)]; ok {
+				for _, imp := range resetField.TypeImports {
+					addImport(imp)
+				}
+			}
+		}
+	}
+}
+
 func fieldsForDefaults(fields []model.OptField) []model.OptField {
 	seen := make(map[string]bool, len(fields))
 
@@ -255,6 +275,7 @@ func (g *Generator) validationCode(ctx plugin.GenerationContext, in model.Genera
 
 	checkCtx := ctx
 	checkCtx.OptionReturnsError = true
+	checkCtx.ValidationOnly = true
 
 	var lines []string
 	for _, f := range in.Fields {

@@ -32,9 +32,11 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.Parameters}}) {{.Optio
 {{- if .TargetReturnsError}}
 		{{.ValueName}}, {{.ErrorName}} := {{.Call}}
 		if {{.ErrorName}} != nil { return {{.ErrorName}} }
-		{{.MarkSet}}o.{{.FieldName}} = {{.ValueName}}
+		{{.MarkSet}}o.{{.FieldName}} = {{.ValueName}}{{if .PostAssignment}}
+		{{.PostAssignment}}{{end}}
 {{- else}}
-		{{.MarkSet}}o.{{.FieldName}} = {{.Call}}
+		{{.MarkSet}}o.{{.FieldName}} = {{.Call}}{{if .PostAssignment}}
+		{{.PostAssignment}}{{end}}
 {{- end}}
 {{- template "optionReturn" . }}
 	}

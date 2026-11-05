@@ -30,7 +30,8 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(key {{.MapKeyType}}, valu
 		if key == zeroKey { return{{if .OptionReturnsError}} nil{{end}} }
 {{if .MapValueNilable}}		if value == nil { return{{if .OptionReturnsError}} nil{{end}} }
 {{end}}		if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
-		{{.MarkSet}}o.{{.FieldName}}[key] = value
+		{{.MarkSet}}o.{{.FieldName}}[key] = value{{if .PostAssignment}}
+		{{.PostAssignment}}{{end}}
 		{{template "optionReturn" .}}
 	}
 }`)

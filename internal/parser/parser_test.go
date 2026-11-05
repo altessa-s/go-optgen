@@ -122,6 +122,8 @@ func TestFindOptFields_TaggedFields(t *testing.T) {
 
 	result, err := parser.FindOptFields(pkg, "options", false, nil)
 	require.NoError(t, err)
+	require.Contains(t, result.StructFields, model.StructField{Name: "skipped", Type: "string"})
+	require.Contains(t, result.StructFields, model.StructField{Name: "plain", Type: "bool"})
 
 	names := make([]string, 0, len(result.Fields))
 	for _, f := range result.Fields {

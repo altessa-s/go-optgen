@@ -45,8 +45,8 @@ var sliceSetTemplate = fieldtmpl.Must("slice-set", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
 	{{- .PreClosureCode}}
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
-{{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
-{{- end}}{{- template "optionReturn" . }}
+{{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{if .PostAssignment}}
+		{{.PostAssignment}}{{end}}{{- end}}{{- template "optionReturn" . }}
 	}
 }`)
 

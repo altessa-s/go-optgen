@@ -161,8 +161,10 @@ func (s RenderSettings) OptionInvertFuncPrefix() string {
 // Go source file: the caller's settings plus the prepared package declarations.
 type GenerateInput struct {
 	RenderSettings
-	PackageName         string
-	Fields              []OptField
+	PackageName string
+	Fields      []OptField
+	// StructFields includes declarations omitted from Fields, such as opt:"-" targets.
+	StructFields        []StructField
 	Imports             map[string]ImportInfo
 	NormalizationMethod string
 	GenericInfo         GenericInfo
@@ -173,8 +175,10 @@ type GenerateInput struct {
 
 // SourcePackage is the syntax adapter's result, before semantic preparation.
 type SourcePackage struct {
-	Name                string
-	Fields              []OptField
+	Name   string
+	Fields []OptField
+	// StructFields includes every declared field, including fields skipped for option generation.
+	StructFields        []StructField
 	Imports             map[string]ImportInfo
 	GenericInfo         GenericInfo
 	NormalizationMethod string

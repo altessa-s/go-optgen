@@ -46,6 +46,20 @@ type OptField struct {
 	SetterTarget   *SetterTarget
 }
 
+// StructField describes a field in the source options struct, including fields
+// that do not generate options.
+type StructField struct {
+	Name         string            // Declared field name
+	Type         string            // Source type expression
+	TypeImports  []GeneratedImport // Imports referenced by the source type
+	TypeResolved bool              // Whether type checking resolved the field type
+	IsBool       bool              // Whether the underlying type is bool
+	IsNumeric    bool              // Whether the underlying type is numeric
+	IsComparable bool              // Whether the field type is comparable
+	IsInterface  bool              // Whether the field type is an interface
+	IsNilable    bool              // Whether values of the field type can be nil
+}
+
 // SetterTarget describes a resolved optfn function or method.
 type SetterTarget struct {
 	Expression   string

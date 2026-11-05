@@ -22,6 +22,14 @@ func valueTypes() []string {
 // or for options without one a panic or, in [model.CheckFailureSkip] mode, a
 // return that keeps the previous value.
 func buildFail(ctx plugin.GenerationContext, msg string) string {
+	if !ctx.ValidationOnly && ctx.OnFailSkip {
+		if ctx.OptionReturnsError {
+			return "return nil"
+		}
+
+		return "return"
+	}
+
 	if !ctx.OptionReturnsError && ctx.CheckFailure == model.CheckFailureSkip {
 		return "return"
 	}

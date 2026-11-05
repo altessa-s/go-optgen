@@ -6,6 +6,9 @@ package check
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strconv"
 	"strings"
 
@@ -15,20 +18,39 @@ import (
 
 const oneofPriority = 40
 
-// OneOfCheck generates validation code ensuring a string value is one of allowed values.
-// Tag usage: optcheck:"oneof=[val1,val2,val3]" where values are string literals.
+// OneOfCheck generates validation code ensuring a value is one of the allowed values.
+// Tag usage: optcheck:"oneof=[val1,val2,val3]".
 type OneOfCheck struct {
 	plugin.CheckBase
 }
 
 // Validate accepts string fields with at least one allowed value.
 func (c *OneOfCheck) Validate(field model.OptField, rawValue string) error {
-	if plugin.ValueKindOf(field) != plugin.ValueString {
-		return notApplicable(field, "string")
+	items := parseOneOfList(rawValue)
+	if len(items) == 0 {
+		return fmt.Errorf("%w: oneof requires at least one value", plugin.ErrInvalidCheckValue)
 	}
 
-	if len(parseStringList(rawValue)) == 0 {
-		return fmt.Errorf("%w: oneof requires at least one value", plugin.ErrInvalidCheckValue)
+	if field.Type == "string" {
+		return nil
+	}
+
+	if !field.IsComparable && field.Type != "bool" && !plugin.IsNumericField(field) && !strings.HasPrefix(field.Type, "*") {
+		return notApplicable(field, "comparable")
+	}
+
+	for _, item := range items {
+		if isGoLiteral(item) {
+			if _, err := parser.ParseExpr(item); err != nil {
+				return fmt.Errorf("%w: oneof item %q is not a valid Go literal", plugin.ErrInvalidCheckValue, item)
+			}
+
+			continue
+		}
+
+		if !identifierExpression(item) {
+			return fmt.Errorf("%w: oneof item %q must be a Go identifier or qualified identifier", plugin.ErrInvalidCheckValue, item)
+		}
 	}
 
 	return nil
@@ -36,7 +58,16 @@ func (c *OneOfCheck) Validate(field model.OptField, rawValue string) error {
 
 // Generate renders the validation code for valueVar.
 func (c *OneOfCheck) Generate(ctx plugin.GenerationContext, field model.OptField, valueVar, rawValue string) []string {
-	vals := parseStringList(rawValue)
+	items := parseOneOfList(rawValue)
+
+	vals := make([]string, 0, len(items))
+	for _, item := range items {
+		if field.Type == "string" {
+			vals = append(vals, normalizeStringLiteral(item))
+		} else {
+			vals = append(vals, item)
+		}
+	}
 
 	return []string{
 		"switch " + valueVar + " {",
@@ -47,7 +78,7 @@ func (c *OneOfCheck) Generate(ctx plugin.GenerationContext, field model.OptField
 	}
 }
 
-func parseStringList(raw string) []string {
+func parseOneOfList(raw string) []string {
 	s := strings.TrimSpace(raw)
 	if rest, ok := strings.CutPrefix(s, "["); ok {
 		if rest, ok = strings.CutSuffix(rest, "]"); ok {
@@ -93,7 +124,7 @@ func parseStringList(raw string) []string {
 			quote = r
 			cur.WriteRune(r)
 		case ',':
-			if item := normalizeStringLiteral(cur.String()); item != "" {
+			if item := strings.TrimSpace(cur.String()); item != "" {
 				items = append(items, item)
 			}
 
@@ -103,11 +134,38 @@ func parseStringList(raw string) []string {
 		}
 	}
 
-	if item := normalizeStringLiteral(cur.String()); item != "" {
+	if item := strings.TrimSpace(cur.String()); item != "" {
 		items = append(items, item)
 	}
 
 	return items
+}
+
+func isGoLiteral(s string) bool {
+	return len(s) >= 2 && ((s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '`' && s[len(s)-1] == '`') ||
+		(s[0] == '\'' && s[len(s)-1] == '\''))
+}
+
+func identifierExpression(s string) bool {
+	expr, err := parser.ParseExpr(s)
+	if err != nil {
+		return false
+	}
+
+	var valid func(ast.Expr) bool
+
+	valid = func(expr ast.Expr) bool {
+		switch node := expr.(type) {
+		case *ast.Ident:
+			return token.IsIdentifier(node.Name)
+		case *ast.SelectorExpr:
+			return token.IsIdentifier(node.Sel.Name) && valid(node.X)
+		default:
+			return false
+		}
+	}
+
+	return valid(expr)
 }
 
 func normalizeStringLiteral(s string) string {

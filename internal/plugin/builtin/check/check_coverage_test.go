@@ -148,6 +148,29 @@ func TestOneOfCheck(t *testing.T) {
 	require.ErrorIs(t, (&check.OneOfCheck{}).Validate(field, "[]"), plugin.ErrInvalidCheckValue)
 }
 
+func TestOneOfComparableIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{FieldName: "mode", Type: "FailMode", IsComparable: true}
+	check := &check.OneOfCheck{}
+	require.NoError(t, check.Validate(field, `[FailOpen,pkg.Mode,"literal"]`))
+	got := check.Generate(newCtx(false), field, "v", `[FailOpen,pkg.Mode,"literal"]`)
+	require.Equal(t, `case FailOpen, pkg.Mode, "literal":`, got[1])
+	require.ErrorIs(t, check.Validate(field, `[pkg.Mode()]`), plugin.ErrInvalidCheckValue)
+	require.ErrorIs(t, check.Validate(field, `[a+b]`), plugin.ErrInvalidCheckValue)
+}
+
+func TestMinCheck(t *testing.T) {
+	t.Parallel()
+
+	check := &check.MinCheck{}
+	field := model.OptField{FieldName: "timeout", Type: "time.Duration", IsNumeric: true}
+	require.NoError(t, check.Validate(field, "1 * time.Second"))
+	require.Equal(t, []string{"if v < (1 * time.Second) {", `  panic(fmt.Errorf("timeout is below minimum (1 * time.Second)"))`, "}"},
+		check.Generate(newCtx(false), field, "v", "1 * time.Second"))
+	require.ErrorIs(t, check.Validate(model.OptField{Type: "string"}, "1"), plugin.ErrNotApplicable)
+}
+
 func TestNonZeroCheck(t *testing.T) {
 	t.Parallel()
 
@@ -170,7 +193,7 @@ func TestNonZeroCheck(t *testing.T) {
 func TestChecksRegistered(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"required", "nonempty", "minlen", "maxlen", "oneof", "nonzero"} {
+	for _, name := range []string{"required", "nonempty", "min", "minlen", "maxlen", "oneof", "nonzero"} {
 		_, _, err := testRegistry().FindCheckPlugin(name)
 		require.NoError(t, err, name)
 	}

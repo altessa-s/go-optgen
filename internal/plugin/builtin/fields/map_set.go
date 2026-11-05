@@ -34,7 +34,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(
         if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
 {{else}}        o.{{.FieldName}} = make({{.Type}}, len(v))
 {{end}}        for _, key := range v { o.{{.FieldName}}[key] = struct{}{} }
-		{{.MarkSet}}{{template "optionReturn" .}}
+        {{.PostAssignment}}{{.MarkSet}}{{template "optionReturn" .}}
 	}
 }`)
 
