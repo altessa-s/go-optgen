@@ -383,9 +383,15 @@ type options struct {
 
 	result, err := parser.FindOptFields(pkg, "options", false, nil)
 	require.NoError(t, err)
-	require.True(t, result.Fields[0].MapValueNilable)
-	require.False(t, result.Fields[1].MapValueNilable)
-	require.True(t, result.Fields[2].MapValueNilable)
+
+	byName := map[string]model.OptField{}
+	for _, field := range result.Fields {
+		byName[field.FieldName] = field
+	}
+
+	require.True(t, byName["callback"].MapValueNilable)
+	require.True(t, byName["value"].MapValueNilable)
+	require.False(t, byName["count"].MapValueNilable)
 }
 
 type resolvedMapFacts struct{}
@@ -411,6 +417,11 @@ func TestFindOptFields_CollectionTagValidation(t *testing.T) {
 		{name: "set map with value", typ: "map[string]int", tag: `optgen:"set"`, wanted: "optgen set requires map[K]struct{}"},
 		{name: "put non map", typ: "string", tag: `optgen:"put"`, wanted: "optgen put requires a map field"},
 		{name: "clone scalar", typ: "int", tag: `optval:"clone"`, wanted: "optval clone requires a slice or map field"},
+		{name: "put checks", typ: "map[string]int", tag: `optgen:"put" optcheck:"minlen=1"`, wanted: "optgen put cannot be combined with optcheck"},
+		{name: "set modifiers", typ: "map[string]struct{}", tag: `optgen:"set" optval:"clone"`, wanted: "optgen set cannot be combined with optval"},
+		{name: "invalid clone mode", typ: "[]string", tag: `optval:"clone=invalid"`, wanted: "unsupported clone mode"},
+		{name: "parseip eager clone", typ: "[]net.IP", tag: `optgen:"parseip" optval:"clone=eager"`, wanted: "parseip cannot be combined"},
+		{name: "put unsupported guard", typ: "map[string]int", tag: `optgen:"put,notnil"`, wanted: "put cannot be combined with optgen modifier \"notnil\""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -419,6 +430,19 @@ func TestFindOptFields_CollectionTagValidation(t *testing.T) {
 			require.ErrorContains(t, err, tc.wanted)
 		})
 	}
+}
+
+func TestFindOptFieldsRejectsEmptyOptionDocDirective(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `package sample
+type options struct {
+//optgen:doc
+value string ` + "`opt:\"Value\"`" + `
+}
+`})
+	_, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.ErrorContains(t, err, "optgen:doc requires an option name")
 }
 
 func TestFindOptFields_LineCommentDoc(t *testing.T) {

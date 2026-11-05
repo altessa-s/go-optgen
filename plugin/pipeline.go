@@ -35,12 +35,15 @@ func NewPipeline(plugins ValuePlugins) *Executor { return &Executor{plugins: plu
 // Final stops code generation; conditional runtime guards must leave it false.
 func (r *Executor) BuildPipeline(ctx GenerationContext, field model.OptField, inputVar string) PipelineResult {
 	mods := r.plugins.CollectModifiers(field)
+	ctx.InputVar = inputVar
 
 	var lines []string
 
+	var preClosure strings.Builder
+
 	value := inputVar
 	finish := func(final bool) PipelineResult {
-		return PipelineResult{Code: strings.Join(lines, "\n"), ValueVar: value, EarlyReturn: final}
+		return PipelineResult{Code: strings.Join(lines, "\n"), ValueVar: value, PreClosureCode: preClosure.String(), EarlyReturn: final}
 	}
 
 	for _, phase := range []Phase{PhaseGuard, PhaseTransform, PhasePostProcess, PhaseCheck, PhaseClone} {
@@ -56,6 +59,8 @@ func (r *Executor) BuildPipeline(ctx GenerationContext, field model.OptField, in
 			}
 
 			result := mod.Generate(ctx, field, value)
+			preClosure.WriteString(result.PreClosureCode)
+
 			if result.Final {
 				lines = append(lines, "_ = "+value)
 			}

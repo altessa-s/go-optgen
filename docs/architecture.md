@@ -72,7 +72,8 @@ generated validation function is a generator-side interface. `GenerationContext`
 (`AddImport`).
 
 The `optfn` syntax is parsed into one `OptField` per target. The source adapter resolves function expressions with `types.Eval` at the field position
-and methods with `types.LookupFieldOrMethod`; the model carries only signature strings, variadic flags, and generated imports. Map fields also carry
+and methods with `types.LookupFieldOrMethod`; the model carries only signature strings, variadic flags, and generated imports. The source adapter keeps
+its `token.FileSet` and `types.Package` private. Map fields also carry
 rendered key and value types plus value nilability for put setters. Function-backed setters do not build the value pipeline. Defaults are deduplicated
 by field before rendering because multiple targets can share one field.
 
@@ -83,8 +84,11 @@ generator validates complete directive docs against the final function name afte
 function prefixes. `fieldtmpl` also detects a field doc that starts with that function name and uses it as the complete doc; all field plugins share
 behavior through their common templates.
 
-Collection setters bypass value modifiers for map keys and values. `clone=eager` snapshots slice or map input before the option closure is created,
-while `clone` copies during closure application.
+The source adapter resolves the types and constant status of check expressions and stores only assignability results on each `OptField`. Check plugins
+use those results during semantic preparation to reject bounds and case values that would fail in generated code.
+
+Collection setters bypass value modifiers for map keys and values. `clone=eager` snapshots slice or map input before the option closure is created through
+the enabled clone modifier's pipeline result, while `clone` copies during closure application. Disabled clone plugins emit neither snapshots nor imports.
 
 The CLI registers only the built-in plugins; external shared objects are not loaded. Plugin implementations must keep per-generation mutable state
 in the generation context, not in package globals or shared plugin instances.

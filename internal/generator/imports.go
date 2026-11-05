@@ -103,15 +103,27 @@ func sourceImports(
 
 		// Extract package prefixes from default expression and add their imports
 		if field.Default != "" {
-			for _, prefix := range extractPackagePrefixes(field.Default) {
-				if imp, ok := importByName[prefix]; ok {
-					imports.add(imp.Path, imp.Alias)
-				}
-			}
+			addExpressionImports(imports, importByName, field.Default)
+		}
+
+		for _, value := range field.Checks {
+			addExpressionImports(imports, importByName, value)
+		}
+
+		if value := field.Metadata["err"]; value != "" {
+			addExpressionImports(imports, importByName, value)
 		}
 	}
 
 	return imports.sorted()
+}
+
+func addExpressionImports(imports importSet, importByName map[string]model.ImportInfo, expression string) {
+	for _, prefix := range extractPackagePrefixes(expression) {
+		if imp, ok := importByName[prefix]; ok {
+			imports.add(imp.Path, imp.Alias)
+		}
+	}
 }
 
 // importSet collects generated imports by path.

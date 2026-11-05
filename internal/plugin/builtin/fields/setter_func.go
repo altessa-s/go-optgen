@@ -66,6 +66,13 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	}
 
 	used := map[string]bool{"o": true}
+
+	for _, imp := range target.Imports {
+		if imp.Alias != "" {
+			used[imp.Alias] = true
+		}
+	}
+
 	params := make([]string, 0, len(target.Parameters))
 
 	args := make([]string, 0, len(target.Parameters))

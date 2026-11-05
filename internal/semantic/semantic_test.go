@@ -191,7 +191,30 @@ func TestPrepareRejectsDuplicateOptfnOptionNames(t *testing.T) {
 		{FieldName: "second", OptionName: "Shared", Type: "string", SetterTarget: &model.SetterTarget{}},
 	}
 	_, err := semantic.New(builtinRegistry(t)).Prepare(fields)
-	require.ErrorContains(t, err, `field second: duplicate optfn option name "Shared" also used by field first`)
+	require.ErrorContains(t, err, `field second: duplicate option name "Shared" also used by field first`)
+}
+
+func TestPrepareRejectsDuplicateRegularAndOptfnOptionNames(t *testing.T) {
+	t.Parallel()
+
+	fields := []model.OptField{
+		{FieldName: "exact", OptionName: "Exact", Type: "string"},
+		{FieldName: "mapping", OptionName: "Exact", Type: "Mapping", SetterTarget: &model.SetterTarget{}},
+	}
+	_, err := semantic.New(builtinRegistry(t)).Prepare(fields)
+	require.ErrorContains(t, err, `duplicate option name "Exact"`)
+}
+
+func TestPrepareRejectsIncompatibleMinAndOneOfValues(t *testing.T) {
+	t.Parallel()
+
+	for _, field := range []model.OptField{
+		{FieldName: "count", Type: "int", IsNumeric: true, Checks: map[string]string{"min": "1.5"}},
+		{FieldName: "mode", Type: "int", IsNumeric: true, IsComparable: true, Checks: map[string]string{"oneof": `["off"]`}},
+	} {
+		_, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{field})
+		require.Error(t, err, "%s", field.FieldName)
+	}
 }
 
 // fakeCatalog serves fixed descriptors for default modifier policy tests.

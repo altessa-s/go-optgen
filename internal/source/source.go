@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -83,7 +84,7 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 
 		out = append(out, model.SourcePackage{
 			Name: pkg.ast.Name, Fields: result.Fields, StructFields: result.StructFields, Imports: result.Imports, GenericInfo: result.GenericInfo,
-			NormalizationMethod: normalization, IsSetField: result.IsSetField, Fset: pkg.fset, Types: pkg.types,
+			NormalizationMethod: normalization, IsSetField: result.IsSetField,
 		})
 	}
 
@@ -192,7 +193,33 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 	return facts, true
 }
 
+func (r typeFacts) CheckValueValid(field ast.Expr, pos token.Pos, expression string, requireConstant bool) bool {
+	fieldType := r.info.TypeOf(field)
+	if fieldType == nil {
+		return false
+	}
+
+	value, err := types.Eval(r.fset, r.types, pos, expression)
+	if err != nil || value.Type == nil || requireConstant && value.Value == nil {
+		return false
+	}
+
+	if value.Value != nil {
+		if target, ok := types.Unalias(fieldType).Underlying().(*types.Basic); ok && target.Info()&types.IsInteger != 0 {
+			if constant.ToInt(value.Value).Kind() == constant.Unknown {
+				return false
+			}
+		}
+	}
+
+	return types.AssignableTo(value.Type, fieldType)
+}
+
 func typeNilable(t types.Type) bool {
+	if _, ok := types.Unalias(t).(*types.TypeParam); ok {
+		return false
+	}
+
 	switch t.Underlying().(type) {
 	case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Signature, *types.Interface:
 		return true
@@ -281,7 +308,7 @@ func (r typeFacts) setterSignature(field ast.Expr, pos token.Pos, expression str
 		return nil, nil, fmt.Errorf("target is not a function")
 	}
 
-	return sig, nil, nil
+	return sig, r.types, nil
 }
 
 type targetImportResolver struct {
@@ -309,13 +336,24 @@ func newTargetImports(
 		resolver.qualifier(targetPackage)
 	}
 
-	if targetPackage == nil && !method {
-		prefix, _, ok := strings.Cut(expression, ".")
-		if ok {
-			if imp, found := imports[prefix]; found && imp.Path != "" {
+	if !method {
+		for _, prefix := range selectorPrefixes(expression) {
+			imp, found := imports[prefix]
+			if !found {
+				for _, imported := range current.Imports() {
+					if imported.Name() == prefix {
+						imp = model.ImportInfo{Path: imported.Path()}
+						found = true
+
+						break
+					}
+				}
+			}
+
+			if found && imp.Path != "" {
 				alias := imp.Alias
-				if alias == "" {
-					alias = prefix
+				if alias == "_" || alias == "." {
+					alias = ""
 				}
 
 				resolver.aliases[imp.Path] = alias
@@ -334,20 +372,73 @@ func (r *targetImportResolver) qualifier(pkg *types.Package) string {
 
 	if alias, ok := r.aliases[pkg.Path()]; ok {
 		if !slices.ContainsFunc(r.imports, func(imp model.GeneratedImport) bool { return imp.Path == pkg.Path() }) {
-			r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: alias})
+			importAlias := alias
+			if importAlias == pkg.Name() {
+				importAlias = ""
+			}
+
+			r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: importAlias})
+		}
+
+		if alias == "" {
+			return pkg.Name()
 		}
 
 		return alias
 	}
 
-	alias := pkg.Name()
+	alias := ""
+	if pkg.Name() != derivePackageName(pkg.Path()) {
+		alias = pkg.Name()
+	}
+
 	if !slices.ContainsFunc(r.imports, func(imp model.GeneratedImport) bool { return imp.Path == pkg.Path() }) {
 		r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: alias})
 	}
 
-	r.aliases[pkg.Path()] = alias
+	r.aliases[pkg.Path()] = pkg.Name()
+	if alias == "" {
+		return pkg.Name()
+	}
 
 	return alias
+}
+
+func selectorPrefixes(expression string) []string {
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return nil
+	}
+
+	var prefixes []string
+
+	ast.Inspect(expr, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		if ident, ok := selector.X.(*ast.Ident); ok {
+			prefixes = append(prefixes, ident.Name)
+		}
+
+		return true
+	})
+
+	return slices.Compact(slices.Sorted(slices.Values(prefixes)))
+}
+
+func derivePackageName(importPath string) string {
+	parts := strings.Split(importPath, "/")
+
+	name := parts[len(parts)-1]
+	if len(parts) > 1 && len(name) > 1 && name[0] == 'v' && strings.Trim(name[1:], "0123456789") == "" {
+		name = parts[len(parts)-2]
+	}
+
+	name, _, _ = strings.Cut(name, ".")
+
+	return name
 }
 
 func setterParameters(signature *types.Signature, qualifier types.Qualifier) []model.FuncParameter {
@@ -392,5 +483,28 @@ func hasInvalidType(sig *types.Signature) bool {
 }
 
 func containsInvalid(t types.Type) bool {
-	return types.TypeString(t, func(*types.Package) string { return "" }) == "invalid type"
+	switch typ := t.(type) {
+	case *types.Basic:
+		return typ.Kind() == types.Invalid
+	case *types.Array:
+		return containsInvalid(typ.Elem())
+	case *types.Slice:
+		return containsInvalid(typ.Elem())
+	case *types.Pointer:
+		return containsInvalid(typ.Elem())
+	case *types.Map:
+		return containsInvalid(typ.Key()) || containsInvalid(typ.Elem())
+	case *types.Chan:
+		return containsInvalid(typ.Elem())
+	case *types.Signature:
+		return hasInvalidType(typ)
+	case *types.Named:
+		for arg := range typ.TypeArgs().Types() {
+			if containsInvalid(arg) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

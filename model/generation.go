@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"go/token"
-	"go/types"
 )
 
 // StringSetterMode selects the signature of string option functions.
@@ -183,6 +182,4 @@ type SourcePackage struct {
 	GenericInfo         GenericInfo
 	NormalizationMethod string
 	IsSetField          string
-	Fset                *token.FileSet
-	Types               *types.Package
 }

@@ -395,6 +395,10 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			IsComparable:   resolved && facts.Comparable,
 			ElemComparable: elemResolved && elemFacts.Comparable,
 		}
+		base.Metadata = markMultipleOption(base.Metadata, len(field.Names) > 1)
+
+		base.CheckValueValid = checkValueFacts(field, parsed, types)
+
 		if len(parsed.SetterTargets) == 0 {
 			out = append(out, base)
 			continue
@@ -429,6 +433,47 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	return out, nil
 }
 
+func markMultipleOption(metadata map[string]string, multiple bool) map[string]string {
+	if !multiple {
+		return metadata
+	}
+
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
+	metadata["multiopt"] = tagValueTrue
+
+	return metadata
+}
+
+func checkValueFacts(field *ast.Field, parsed parsedFieldTags, resolver TypeResolver) map[string]bool {
+	factsResolver, ok := resolver.(CheckValueResolver)
+	if !ok {
+		return nil
+	}
+
+	facts := make(map[string]bool)
+
+	for _, key := range []string{"min", checkOneOfKey} {
+		value, exists := parsed.Checks[key]
+		if !exists {
+			continue
+		}
+
+		expressions := []string{value}
+		if key == checkOneOfKey {
+			expressions = ParseExprList(value)
+		}
+
+		for _, expression := range expressions {
+			facts[expression] = factsResolver.CheckValueValid(field.Type, field.Pos(), expression, key == checkOneOfKey)
+		}
+	}
+
+	return facts
+}
+
 func mapEntryFacts(mapType *ast.MapType, types TypeResolver) (keyType, valueType string, valueNilable bool) {
 	if mapType == nil {
 		return "", "", false
@@ -456,11 +501,12 @@ func extractOptionDocs(field *ast.Field) (map[string]string, error) {
 	for _, comment := range field.Doc.List {
 		text := strings.TrimPrefix(comment.Text, "//")
 
-		if !strings.HasPrefix(text, "optgen:doc ") {
+		if text != "optgen:doc" && !strings.HasPrefix(text, "optgen:doc ") {
 			continue
 		}
 
-		optionAndText := strings.TrimPrefix(text, "optgen:doc ")
+		optionAndText := strings.TrimPrefix(text, "optgen:doc")
+		optionAndText = strings.TrimSpace(optionAndText)
 		option, docLine, hasText := strings.Cut(optionAndText, " ")
 
 		if option == "" {
@@ -486,21 +532,61 @@ func extractOptionDocs(field *ast.Field) (map[string]string, error) {
 	return joined, nil
 }
 
+const tagValueTrue = "true"
+const tagValueSet = "set"
+const tagValuePut = "put"
+const checkOneOfKey = "oneof"
+
 func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed parsedFieldTags) error {
 	fieldName := field.Names[0].Name
 	if parsed.TagError != nil {
 		return fmt.Errorf("field %s: %w", fieldName, parsed.TagError)
 	}
 
-	_, isSet := parsed.Metadata["set"]
-	_, isPut := parsed.Metadata["put"]
+	_, isSet := parsed.Metadata[tagValueSet]
+
+	_, isPut := parsed.Metadata[tagValuePut]
 
 	if isSet && isPut {
 		return fmt.Errorf("field %s: optgen set and put cannot be combined", fieldName)
 	}
 
+	if err := validateCollectionSetterTags(field, parsed, isSet, isPut); err != nil {
+		return err
+	}
+
+	if err := validateOptfnTags(fieldName, ctx, parsed); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateCollectionSetterTags(field *ast.Field, parsed parsedFieldTags, isSet, isPut bool) error {
+	fieldName := field.Names[0].Name
+
+	if err := validateCollectionType(fieldName, field.Type, isSet, isPut); err != nil {
+		return err
+	}
+
+	if err := validateCollectionOptions(fieldName, parsed, isSet, isPut); err != nil {
+		return err
+	}
+
+	if err := validateCloneMode(fieldName, parsed.Modifiers); err != nil {
+		return err
+	}
+
+	if parsed.Metadata["parseip"] == tagValueTrue && slices.Contains(parsed.Modifiers, "clone=eager") {
+		return fmt.Errorf("field %s: optgen parseip cannot be combined with optval clone=eager", fieldName)
+	}
+
+	return validateCloneType(fieldName, field.Type, parsed.Modifiers)
+}
+
+func validateCollectionType(fieldName string, fieldType ast.Expr, isSet, isPut bool) error {
 	if isSet {
-		mapType, ok := field.Type.(*ast.MapType)
+		mapType, ok := fieldType.(*ast.MapType)
 
 		value, emptyStruct := mapTypeValue(mapType)
 		if !ok || !emptyStruct || TypeToString(value) != "struct{}" {
@@ -509,27 +595,74 @@ func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed par
 	}
 
 	if isPut {
-		if _, ok := field.Type.(*ast.MapType); !ok {
+		if _, ok := fieldType.(*ast.MapType); !ok {
 			return fmt.Errorf("field %s: optgen put requires a map field", fieldName)
 		}
 	}
 
-	for _, modifier := range parsed.Modifiers {
+	return nil
+}
+
+func validateCollectionOptions(fieldName string, parsed parsedFieldTags, isSet, isPut bool) error {
+	if !isSet && !isPut {
+		return nil
+	}
+
+	kind := tagValueSet
+	if isPut {
+		kind = tagValuePut
+	}
+
+	if len(parsed.Checks) > 0 {
+		return fmt.Errorf("field %s: optgen %s cannot be combined with optcheck", fieldName, kind)
+	}
+
+	if len(parsed.Modifiers) > 0 {
+		return fmt.Errorf("field %s: optgen %s cannot be combined with optval", fieldName, kind)
+	}
+
+	for key := range parsed.Metadata {
+		switch key {
+		case tagValueSet, tagValuePut, "append", "manual", "enables", "resets":
+		default:
+			return fmt.Errorf("field %s: optgen %s cannot be combined with optgen modifier %q", fieldName, kind, key)
+		}
+	}
+
+	return nil
+}
+
+func validateCloneMode(fieldName string, modifiers []string) error {
+	for _, modifier := range modifiers {
+		if key, value, ok := strings.Cut(modifier, "="); ok && key == "clone" && value != "eager" {
+			return fmt.Errorf("field %s: unsupported clone mode %q", fieldName, value)
+		}
+	}
+
+	return nil
+}
+
+func validateCloneType(fieldName string, fieldType ast.Expr, modifiers []string) error {
+	for _, modifier := range modifiers {
 		if modifier != "clone" && modifier != "clone=eager" {
 			continue
 		}
 
-		if _, slice := field.Type.(*ast.ArrayType); slice {
+		if _, slice := fieldType.(*ast.ArrayType); slice {
 			continue
 		}
 
-		if _, mapField := field.Type.(*ast.MapType); mapField {
+		if _, mapField := fieldType.(*ast.MapType); mapField {
 			continue
 		}
 
 		return fmt.Errorf("field %s: optval %s requires a slice or map field", fieldName, modifier)
 	}
 
+	return nil
+}
+
+func validateOptfnTags(fieldName string, ctx fieldProcessingContext, parsed parsedFieldTags) error {
 	if !ctx.hasOptfn {
 		return nil
 	}
@@ -589,7 +722,12 @@ func resolveSetterFields(
 			setterField.Metadata = make(map[string]string)
 		}
 
-		setterField.Metadata["optfn"] = "true"
+		setterField.Metadata["optfn"] = tagValueTrue
+
+		if len(targets) > 1 || len(field.Names) > 1 {
+			setterField.Metadata["multiopt"] = "true"
+		}
+
 		fields = append(fields, setterField)
 	}
 

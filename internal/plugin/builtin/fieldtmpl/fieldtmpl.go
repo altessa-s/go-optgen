@@ -50,7 +50,7 @@ func Execute(tmpl *template.Template, data any) (plugin.GeneratedCode, error) {
 			}
 
 			base.FullDocComment = fullDocComment(base.OptionDoc)
-		} else if strings.HasPrefix(base.Doc, functionName+" ") {
+		} else if base.Metadata["multiopt"] != "true" && strings.HasPrefix(base.Doc, functionName+" ") {
 			base.FullDocComment = fullDocComment(base.Doc)
 		}
 	}
@@ -73,7 +73,7 @@ func fullDocComment(doc string) string {
 	var b strings.Builder
 
 	for line := range strings.Lines(doc) {
-		line = strings.TrimRight(line, "\r\n")
+		line = strings.TrimRight(line, " \t\r\n")
 
 		b.WriteString("\n//")
 
@@ -114,10 +114,14 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 	mark := markSet(ctx, field)
 
 	post := postAssignment(ctx, field)
-
 	if post != "" {
 		post += mark
 		mark = ""
+	}
+
+	doc := field.Doc
+	if field.Metadata["multiopt"] == "true" && strings.HasPrefix(doc, ctx.OptionFuncPrefix()) {
+		doc = ""
 	}
 
 	return BaseData{
@@ -132,13 +136,18 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 		SliceParam:         ctx.SliceSetter == model.SliceSetterSlice,
 		MarkSet:            mark,
 		PostAssignment:     post,
-		DocComment:         docComment(field.Doc),
+		DocComment:         docComment(doc),
 		DocSummary:         "sets the " + field.FieldName + " option.",
 	}
 }
 
 func postAssignment(ctx plugin.GenerationContext, field model.OptField) string {
 	var b strings.Builder
+
+	fieldsByName := make(map[string]model.StructField, len(ctx.StructFields))
+	for _, sourceField := range ctx.StructFields {
+		fieldsByName[sourceField.Name] = sourceField
+	}
 
 	if target := strings.TrimSpace(field.Metadata["enables"]); target != "" {
 		fmt.Fprintf(&b, "\t\to.%s = true\n", target)
@@ -147,6 +156,12 @@ func postAssignment(ctx plugin.GenerationContext, field model.OptField) string {
 	for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
 		target = strings.TrimSpace(target)
 		if target != "" {
+			if resetField, ok := fieldsByName[target]; ok {
+				for _, imp := range resetField.TypeImports {
+					ctx.AddImport(imp.Path, imp.Alias)
+				}
+			}
+
 			fmt.Fprintf(&b, "\t\to.%s = *new(%s)\n", target, structFieldType(ctx, target))
 		}
 	}
@@ -216,30 +231,20 @@ func NewData(ctx plugin.GenerationContext, field model.OptField, values plugin.P
 		code = "\t\t" + strings.ReplaceAll(result.Code, "\n", "\n\t\t") + "\n"
 	}
 
-	base := NewBaseData(ctx, field)
-	base.PreClosureCode = preClosureCode(ctx, field, inputVar)
-
-	return Data{BaseData: base, PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
-}
-
-func preClosureCode(ctx plugin.GenerationContext, field model.OptField, inputVar string) string {
-	for _, modifier := range field.Modifiers {
-		if modifier != "clone=eager" {
-			continue
-		}
-
-		if field.IsSlice {
-			ctx.AddImport("slices")
-			return "\t" + inputVar + " = slices.Clone(" + inputVar + ")\n"
-		}
-
-		if field.IsMap {
-			ctx.AddImport("maps")
-			return "\t" + inputVar + " = maps.Clone(" + inputVar + ")\n"
+	baseField := field
+	if result.EarlyReturn && field.Metadata["resets"] != "" {
+		baseField.Metadata = make(map[string]string, len(field.Metadata))
+		for key, value := range field.Metadata {
+			if key != "resets" {
+				baseField.Metadata[key] = value
+			}
 		}
 	}
 
-	return ""
+	base := NewBaseData(ctx, baseField)
+	base.PreClosureCode = result.PreClosureCode
+
+	return Data{BaseData: base, PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
 }
 
 // markSet returns the statement recording that the option of field was

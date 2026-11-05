@@ -34,6 +34,8 @@ type GenerationContext struct {
 	ValidationOnly bool
 	// OnFailSkip selects a no-op return for a failed option-body check.
 	OnFailSkip bool
+	// InputVar names the original value variable before the modifier pipeline.
+	InputVar string
 
 	// Imports contains all imports available in the source file.
 	// Map key is the package alias, value is import info.

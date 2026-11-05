@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -155,4 +156,91 @@ func TestReaderLeavesTypeParametersUnresolved(t *testing.T) {
 	require.False(t, byName["bad"].TypeResolved, "undefined types stay unresolved")
 	require.True(t, byName["c"].TypeResolved)
 	require.False(t, byName["c"].IsNumeric, "complex numbers are not ordered")
+}
+
+func TestReaderMapValueTypeParameterIsNotNilable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\ntype options[V any] struct { entries map[string]V `optgen:\"put\"` }\n"), 0o600))
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.False(t, packages[0].Fields[0].MapValueNilable)
+}
+
+func TestReaderRejectsUnresolvedTypesNestedInSetterParameters(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+
+	src := "package sample\ntype Result struct{}\nfunc makeResult(opts ...Missing) Result { return Result{} }\ntype options struct { result Result `optfn:\"Result=makeResult\"` }\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte(src), 0o600))
+
+	_, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.ErrorContains(t, err, "target signature contains an unresolved type")
+}
+
+func TestReaderResolvesOptfnImportsFromSelectorsAndGenericArguments(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":         "module sample\n\ngo 1.26\n",
+		"options.go":     "package sample\nimport codec \"sample/codec\"\nimport \"sample/v3\"\ntype Box[T any] struct{ value T }\nfunc makeBox[T any](id string) Box[T] { return Box[T]{} }\ntype options struct { result codec.Result `optfn:\"Result=codec.Parse\"`; generic Box[yaml.Item] `optfn:\"Generic=makeBox[yaml.Item]\"` }\n",
+		"codec/codec.go": "package codec\ntype Result struct{}\nfunc Parse(codec string) Result { return Result{} }\n",
+		"v3/yaml.go":     "package yaml\ntype Item struct{}\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	byOption := make(map[string]model.SetterTarget)
+	for _, field := range packages[0].Fields {
+		byOption[field.OptionName] = *field.SetterTarget
+	}
+
+	for _, name := range []string{"Result", "Generic"} {
+		require.NotEmpty(t, byOption[name].Imports, name)
+	}
+}
+
+func TestReaderResolvesCheckConstantsAndCompatibility(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":     "module sample\n\ngo 1.26\n",
+		"options.go": "package sample\ntype Mode string\nconst FailOpen Mode = \"open\"\nvar FailClosed Mode\ntype options struct { count int `optcheck:\"min=1.5\"`; mode Mode `optcheck:\"oneof=[FailOpen,FailClosed]\"` }\n",
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	byField := make(map[string]model.OptField)
+	for _, field := range packages[0].Fields {
+		byField[field.FieldName] = field
+	}
+
+	require.False(t, byField["count"].CheckValueValid["1.5"])
+	require.True(t, byField["mode"].CheckValueValid["FailOpen"])
+	require.False(t, byField["mode"].CheckValueValid["FailClosed"])
+}
+
+func TestSourcePackageDoesNotExposeTypeCheckerState(t *testing.T) {
+	t.Parallel()
+
+	typeOfPackage := reflect.TypeFor[model.SourcePackage]()
+	_, hasFset := typeOfPackage.FieldByName("Fset")
+	_, hasTypes := typeOfPackage.FieldByName("Types")
+
+	require.False(t, hasFset)
+	require.False(t, hasTypes)
 }

@@ -145,3 +145,50 @@ func TestPositiveModifier(t *testing.T) {
 	res = m.Generate(newCtx(true), model.OptField{Type: "int", Modifiers: []string{"positive=allow_zero"}}, "n")
 	require.Equal(t, []string{"if n < 0 {", "  return nil", "}"}, res.Code)
 }
+
+func TestCloneModifierUsesPipelineOutputAndSupportsEagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	modifier := &postprocess.CloneModifier{}
+	field := model.OptField{Type: "[]net.IP", IsSlice: true, ElemType: "net.IP", Modifiers: []string{"clone=eager"}}
+	ctx := newCtx(false)
+	ctx.InputVar = "v"
+	result := modifier.Generate(ctx, field, "v")
+	require.Contains(t, result.PreClosureCode, "slices.Clone(v)")
+	require.Equal(t, []string{"slices"}, imports(ctx))
+
+	ctx = newCtx(false)
+	ctx.InputVar = "v"
+	result = modifier.Generate(ctx, field, "transformed")
+	require.Contains(t, result.PreClosureCode, "slices.Clone(v)")
+	require.Equal(t, []string{"slices"}, imports(ctx))
+
+	ctx = newCtx(false)
+	field.Modifiers = nil
+	result = modifier.Generate(ctx, field, "transformed")
+	require.Empty(t, result.Code)
+	require.Empty(t, ctx.GetAdditionalImports())
+}
+
+func TestDisabledCloneModifierDoesNotEmitEagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	registry := plugin.NewRegistry()
+	require.NoError(t, registry.Register(&postprocess.CloneModifier{}))
+	require.NoError(t, registry.DisablePlugins("Clone"))
+
+	field := model.OptField{Type: "[]string", IsSlice: true, ElemType: "string", Modifiers: []string{"clone=eager"}}
+	ctx := newCtx(false)
+	result := plugin.NewPipeline(registry).BuildPipeline(ctx, field, "v")
+	require.Empty(t, result.PreClosureCode)
+	require.Empty(t, ctx.GetAdditionalImports())
+}
+
+func imports(ctx plugin.GenerationContext) []string {
+	var paths []string
+	for _, imported := range ctx.GetAdditionalImports() {
+		paths = append(paths, imported.Path)
+	}
+
+	return paths
+}

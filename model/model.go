@@ -26,6 +26,7 @@ type OptField struct {
 	Metadata        map[string]string // Additional metadata from tag (arbitrary key=value pairs)
 	BareChecks      map[string]bool   // Checks declared without a value.
 	Checks          map[string]string // Validation rules for option values (arbitrary key=value pairs)
+	CheckValueValid map[string]bool   // Type-check results for constant bounds and case values
 	IsSlice         bool              // Whether the field is a slice type
 	IsMap           bool              // Whether the field is a map type
 	MapKeyType      string            // Key type for maps

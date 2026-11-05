@@ -6,7 +6,6 @@ package postprocess
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/altessa-s/go-optgen/model"
 	"github.com/altessa-s/go-optgen/plugin"
@@ -31,44 +30,35 @@ func (m *CloneModifier) CanHandle(field model.OptField) bool { return field.IsSl
 
 // Generate renders a closure-time copy unless the pipeline already made a fresh collection.
 func (m *CloneModifier) Generate(ctx plugin.GenerationContext, field model.OptField, inputVar string) plugin.ModifierResult {
-	if field.IsSlice && ((hasModifier(field, "dedup") && (field.ElemComparable || isComparableType(field.ElemType))) ||
-		field.ElemType == "string" && (hasModifier(field, "nonempty") || hasSliceTransform(field))) {
+	if hasModifier(field, "clone=eager") {
+		snapshotVar := ctx.InputVar
+		if snapshotVar == "" {
+			snapshotVar = inputVar
+		}
+
+		if field.IsSlice {
+			ctx.AddImport("slices")
+			return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = slices.Clone(" + snapshotVar + ")\n"}
+		}
+
+		ctx.AddImport("maps")
+
+		return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = maps.Clone(" + snapshotVar + ")\n"}
+	}
+
+	if inputVar != "v" {
 		return plugin.ModifierResult{OutputVar: inputVar}
 	}
 
 	if field.IsSlice {
 		ctx.AddImport("slices")
 
-		if hasModifier(field, "clone=eager") {
-			return plugin.ModifierResult{OutputVar: inputVar}
-		}
-
 		return plugin.ModifierResult{Code: []string{"cloned := slices.Clone(" + inputVar + ")"}, OutputVar: "cloned"}
 	}
 
 	ctx.AddImport("maps")
 
-	if hasModifier(field, "clone=eager") {
-		return plugin.ModifierResult{OutputVar: inputVar}
-	}
-
 	return plugin.ModifierResult{Code: []string{"cloned := maps.Clone(" + inputVar + ")"}, OutputVar: "cloned"}
-}
-
-func hasSliceTransform(field model.OptField) bool {
-	if field.ElemType != "string" {
-		return false
-	}
-
-	for _, modifier := range field.Modifiers {
-		key, _, _ := strings.Cut(modifier, "=")
-		switch key {
-		case "trimspaces", "lower", "upper", "trimprefix", "trimsuffix":
-			return true
-		}
-	}
-
-	return false
 }
 
 func hasModifier(field model.OptField, want string) bool {

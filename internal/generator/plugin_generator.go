@@ -81,8 +81,6 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		helpers = append(helpers, result.Helpers...)
 	}
 
-	addResetImports(in, addImport)
-
 	validation := g.validationCode(ctx, in)
 	defaultFields := fieldsForDefaults(in.Fields)
 
@@ -186,23 +184,6 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	}
 
 	return g.renderPluginTemplate(data)
-}
-
-func addResetImports(in model.GenerateInput, addImport func(model.GeneratedImport)) {
-	fieldsByName := make(map[string]model.StructField, len(in.StructFields))
-	for _, field := range in.StructFields {
-		fieldsByName[field.Name] = field
-	}
-
-	for _, field := range in.Fields {
-		for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
-			if resetField, ok := fieldsByName[strings.TrimSpace(target)]; ok {
-				for _, imp := range resetField.TypeImports {
-					addImport(imp)
-				}
-			}
-		}
-	}
 }
 
 func fieldsForDefaults(fields []model.OptField) []model.OptField {

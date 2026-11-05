@@ -57,6 +57,24 @@ func TestGenerator_Optfn(t *testing.T) {
 	})
 }
 
+func TestGeneratorOptfnParameterDoesNotShadowTargetImport(t *testing.T) {
+	t.Parallel()
+
+	r := testRegistry()
+	field := model.OptField{FieldName: "value", OptionName: "Value", Type: "codec.Result", SetterTarget: &model.SetterTarget{
+		Expression: "codec.Parse", Imports: []model.GeneratedImport{{Path: "example.com/codec", Alias: "codec"}},
+		Parameters: []model.FuncParameter{{Name: "codec", Type: "string"}},
+	}}
+	prepared, err := semantic.New(r).Prepare([]model.OptField{field})
+	require.NoError(t, err)
+	generated, err := generator.New(r, plugin.NewPipeline(r)).Generate(model.GenerateInput{
+		TypeName: "options", OptionType: "Option", PackageName: "sample", Fields: prepared,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(generated), "codecArg string")
+	require.Contains(t, string(generated), "codec.Parse(codecArg)")
+}
+
 func TestGenerator_OptionDocUsesPreparedOptionPrefix(t *testing.T) {
 	t.Parallel()
 

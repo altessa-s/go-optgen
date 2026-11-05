@@ -134,7 +134,7 @@ func parseFlagKV(parts []string) map[string]string {
 			continue
 		}
 
-		out[part] = "true"
+		out[part] = tagValueTrue
 	}
 
 	if len(out) == 0 {

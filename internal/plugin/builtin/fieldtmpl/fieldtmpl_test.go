@@ -92,6 +92,36 @@ func TestExecuteUsesFullOptionDocumentation(t *testing.T) {
 	require.Equal(t, "summary\n//\n// A field description.", out.Code)
 }
 
+func TestExecuteDoesNotReuseFullFieldDocAcrossMultiOptionField(t *testing.T) {
+	t.Parallel()
+
+	tmpl := template.Must(template.New("doc").Parse(fieldtmpl.Common + `{{template "optionDoc" .}}`))
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	base := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "mapping", OptionName: "Second", Doc: "WithFirst sets the first mapping.", Metadata: map[string]string{"multiopt": "true"}})
+	base.FuncPrefix = "With"
+	out, err := fieldtmpl.Execute(tmpl, &base)
+	require.NoError(t, err)
+	require.NotContains(t, out.Code, "WithFirst")
+}
+
+func TestResetImportsFollowEmittedPostAssignment(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{FieldName: "mode", Metadata: map[string]string{"resets": "client"}}
+	structFields := []model.StructField{{Name: "client", Type: "*client.Client", TypeImports: []model.GeneratedImport{{Path: "example.com/client", Alias: "client"}}}}
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	ctx.StructFields = structFields
+	base := fieldtmpl.NewBaseData(ctx, field)
+	require.Contains(t, base.PostAssignment, "*new(*client.Client)")
+	require.Equal(t, []model.GeneratedImport{{Path: "example.com/client", Alias: "client"}}, ctx.GetAdditionalImports())
+
+	ctx = plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	ctx.StructFields = structFields
+	data := fieldtmpl.NewData(ctx, field, stubPipeline{ValueVar: "v", EarlyReturn: true}, "v")
+	require.Empty(t, data.PostAssignment)
+	require.Empty(t, ctx.GetAdditionalImports())
+}
+
 func TestExecuteRejectsOptionDocumentationWithWrongFunctionName(t *testing.T) {
 	t.Parallel()
 

@@ -68,3 +68,13 @@ func TestSourceImports_Pin(t *testing.T) {
 		require.Equal(t, []model.GeneratedImport{{Path: "example.com/b"}, {Path: "example.com/z"}}, got)
 	})
 }
+
+func TestSourceImportsCheckAndErrorExpressions(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{Checks: map[string]string{"min": "limits.MaxPayload"}, Metadata: map[string]string{"err": "limits.ErrInvalid"}}
+	imports := sourceImports([]model.OptField{field}, map[string]model.ImportInfo{
+		"limits": {Path: "example.com/limits", Alias: "limits"},
+	}, nil)
+	require.Equal(t, []model.GeneratedImport{{Path: "example.com/limits", Alias: "limits"}}, imports)
+}

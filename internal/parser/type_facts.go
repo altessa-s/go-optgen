@@ -30,3 +30,8 @@ type TypeResolver interface {
 	TypeFacts(expr ast.Expr) (TypeFacts, bool)
 	ResolveSetterTarget(field ast.Expr, pos token.Pos, expression string, method bool, imports map[string]model.ImportInfo) (model.SetterTarget, error)
 }
+
+// CheckValueResolver reports whether a check expression is type-compatible with its field.
+type CheckValueResolver interface {
+	CheckValueValid(field ast.Expr, pos token.Pos, expression string, constant bool) bool
+}

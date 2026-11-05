@@ -6,7 +6,10 @@ package check
 
 import (
 	"fmt"
+	"go/constant"
 	"go/parser"
+	"go/token"
+	"go/types"
 	"strings"
 
 	"github.com/altessa-s/go-optgen/model"
@@ -29,8 +32,21 @@ func (c *MinCheck) Validate(field model.OptField, value string) error {
 		return fmt.Errorf("%w: min requires a value", plugin.ErrInvalidCheckValue)
 	}
 
+	if valid, ok := field.CheckValueValid[value]; ok && !valid {
+		return fmt.Errorf("%w: min bound %q is not assignable to field type %s", plugin.ErrInvalidCheckValue, value, field.Type)
+	}
+
 	if _, err := parser.ParseExpr(value); err != nil {
 		return fmt.Errorf("%w: min bound %q is not a Go expression", plugin.ErrInvalidCheckValue, value)
+	}
+
+	if evaluated, err := types.Eval(token.NewFileSet(), nil, token.NoPos, value); err == nil && evaluated.Value != nil {
+		kind := evaluated.Value.Kind()
+		if field.Type == "int" || strings.HasPrefix(field.Type, "int") || strings.HasPrefix(field.Type, "uint") {
+			if kind != constant.Int {
+				return fmt.Errorf("%w: min bound %q is not an integer", plugin.ErrInvalidCheckValue, value)
+			}
+		}
 	}
 
 	return nil

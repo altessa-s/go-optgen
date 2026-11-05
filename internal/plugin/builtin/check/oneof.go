@@ -7,8 +7,10 @@ package check
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"strconv"
 	"strings"
 
@@ -35,25 +37,68 @@ func (c *OneOfCheck) Validate(field model.OptField, rawValue string) error {
 		return nil
 	}
 
-	if !field.IsComparable && field.Type != "bool" && !plugin.IsNumericField(field) && !strings.HasPrefix(field.Type, "*") {
+	if !oneOfApplicable(field) {
 		return notApplicable(field, "comparable")
 	}
 
 	for _, item := range items {
-		if isGoLiteral(item) {
-			if _, err := parser.ParseExpr(item); err != nil {
-				return fmt.Errorf("%w: oneof item %q is not a valid Go literal", plugin.ErrInvalidCheckValue, item)
-			}
-
-			continue
-		}
-
-		if !identifierExpression(item) {
-			return fmt.Errorf("%w: oneof item %q must be a Go identifier or qualified identifier", plugin.ErrInvalidCheckValue, item)
+		if err := validateOneOfItem(field, item); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func oneOfApplicable(field model.OptField) bool {
+	if !field.TypeResolved && identifierExpression(field.Type) {
+		return true
+	}
+
+	return field.IsComparable || field.Type == "bool" || plugin.IsNumericField(field) || strings.HasPrefix(field.Type, "*")
+}
+
+func validateOneOfItem(field model.OptField, item string) error {
+	if valid, ok := field.CheckValueValid[item]; ok && !valid {
+		return fmt.Errorf("%w: oneof item %q must be a compatible constant", plugin.ErrInvalidCheckValue, item)
+	}
+
+	if plugin.IsNumericField(field) {
+		if evaluated, err := types.Eval(token.NewFileSet(), nil, token.NoPos, item); err == nil && evaluated.Value != nil {
+			kind := evaluated.Value.Kind()
+			if kind != constant.Int && kind != constant.Float {
+				return fmt.Errorf("%w: oneof item %q is not numeric", plugin.ErrInvalidCheckValue, item)
+			}
+
+			if isIntegerType(field.Type) && kind != constant.Int {
+				return fmt.Errorf("%w: oneof item %q is not an integer", plugin.ErrInvalidCheckValue, item)
+			}
+
+			return nil
+		}
+
+		if isGoLiteral(item) && (item[0] == '"' || item[0] == '\'' || item[0] == '`') {
+			return fmt.Errorf("%w: oneof item %q is not numeric", plugin.ErrInvalidCheckValue, item)
+		}
+	}
+
+	if isGoLiteral(item) {
+		if _, err := parser.ParseExpr(item); err != nil {
+			return fmt.Errorf("%w: oneof item %q is not a valid Go literal", plugin.ErrInvalidCheckValue, item)
+		}
+
+		return nil
+	}
+
+	if !identifierExpression(item) {
+		return fmt.Errorf("%w: oneof item %q must be a Go identifier or qualified identifier", plugin.ErrInvalidCheckValue, item)
+	}
+
+	return nil
+}
+
+func isIntegerType(typeName string) bool {
+	return strings.HasPrefix(typeName, "int") || strings.HasPrefix(typeName, "uint")
 }
 
 // Generate renders the validation code for valueVar.

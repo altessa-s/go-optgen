@@ -59,6 +59,9 @@ type ModifierResult struct {
 	// May be the same as inputVar if the modifier doesn't create a new variable.
 	OutputVar string
 
+	// PreClosureCode runs before the option closure is created.
+	PreClosureCode string
+
 	// Final indicates that pipeline should stop after this modifier.
 	// Set only for an unconditional terminal statement; conditional guards leave it false.
 	Final bool
@@ -101,6 +104,9 @@ type PipelineResult struct {
 
 	// ValueVar is the final variable name to use for assignment.
 	ValueVar string
+
+	// PreClosureCode runs before the option closure is created.
+	PreClosureCode string
 
 	// EarlyReturn is true if a guard triggered an early return.
 	EarlyReturn bool

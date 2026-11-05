@@ -34,6 +34,8 @@ type Preparer struct {
 	options *options
 }
 
+const metadataTrue = "true"
+
 // New binds the required catalog to a semantic preparer.
 func New(catalog Catalog, opts ...Option) *Preparer {
 	return &Preparer{catalog: catalog, options: newOptions(opts...)}
@@ -58,9 +60,9 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		}
 
 		f.OptionName = p.options.prefix + f.OptionName
-		if f.SetterTarget != nil {
+		if f.Metadata["manual"] != metadataTrue && !f.Mandatory && !f.DefaultOnly && f.OptionName != "" {
 			if previous, exists := optionNames[f.OptionName]; exists {
-				return nil, fmt.Errorf("field %s: duplicate optfn option name %q also used by field %s", f.FieldName, f.OptionName, previous)
+				return nil, fmt.Errorf("field %s: duplicate option name %q also used by field %s", f.FieldName, f.OptionName, previous)
 			}
 
 			optionNames[f.OptionName] = f.FieldName

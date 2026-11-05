@@ -40,6 +40,7 @@ package rather than any internal package to access the types they receive and pr
 | `Modifiers`    | Merged automatic and explicit `optval` modifiers, excluding disablers (e.g. `["trimspaces", "lower"]`)                         |
 | `Metadata`     | Flags and `key=value` pairs from the `optgen` tag (e.g. `append`, `notnil`)                   |
 | `Checks`       | Validation rules from the `optcheck` tag (e.g. `{"required":"", "minlen":"3"}`)               |
+| `CheckValueValid` | Type-check result for oneof constants and min bounds when source type information is available |
 | `IsSlice`      | Whether the field is a slice type                                                             |
 | `IsMap`        | Whether the field is a map type; `MapKeyType`, `MapValueType`, and `MapValueNilable` describe its entries |
 | `IsInterface`  | Whether the field is an interface type                                                        |
@@ -55,3 +56,4 @@ package rather than any internal package to access the types they receive and pr
 
 `SourcePackage` and `GenerateInput` also carry `StructFields`, which preserves the names, source type strings, imports, and resolved type facts for every
 field in the options struct, including fields skipped by `opt:"-"`. Semantic preparation uses these declarations to validate `enables` and `resets`.
+The source adapter keeps `go/token` and `go/types` state private and passes only resolved declarations and signature details through the model.

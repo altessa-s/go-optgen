@@ -148,6 +148,31 @@ func TestOneOfCheck(t *testing.T) {
 	require.ErrorIs(t, (&check.OneOfCheck{}).Validate(field, "[]"), plugin.ErrInvalidCheckValue)
 }
 
+func TestOneOfCheckAcceptsNumericLiteralsAndUnresolvedNamedStrings(t *testing.T) {
+	t.Parallel()
+
+	check := &check.OneOfCheck{}
+	require.NoError(t, check.Validate(model.OptField{Type: "int", IsNumeric: true, IsComparable: true}, "[1,2,-3]"))
+	require.NoError(t, check.Validate(model.OptField{Type: "FailMode", TypeResolved: false}, `["open","closed"]`))
+}
+
+func TestOneOfCheckRejectsTypeCheckerKnownNonConstants(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{FieldName: "mode", Type: "Mode", TypeResolved: true, IsComparable: true,
+		CheckValueValid: map[string]bool{"FailOpen": true, "FailClosed": false}}
+	check := &check.OneOfCheck{}
+	require.NoError(t, check.Validate(field, "[FailOpen]"))
+	require.ErrorIs(t, check.Validate(field, "[FailClosed]"), plugin.ErrInvalidCheckValue)
+}
+
+func TestMinCheckRejectsTypeCheckerKnownIncompatibleBounds(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{FieldName: "count", Type: "int", IsNumeric: true, CheckValueValid: map[string]bool{"1.5": false}}
+	require.ErrorIs(t, (&check.MinCheck{}).Validate(field, "1.5"), plugin.ErrInvalidCheckValue)
+}
+
 func TestOneOfComparableIdentifiers(t *testing.T) {
 	t.Parallel()
 

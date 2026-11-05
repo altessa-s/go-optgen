@@ -6,7 +6,7 @@ package stages45
 import (
 	"strings"
 
-	time "time"
+	"time"
 )
 
 // Option is a functional option for configuring options.
