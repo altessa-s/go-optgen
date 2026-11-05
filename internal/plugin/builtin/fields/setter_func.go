@@ -26,7 +26,7 @@ func (p *SetterFuncPlugin) Meta() plugin.Meta {
 // CanHandle reports whether field has a resolved optfn target.
 func (p *SetterFuncPlugin) CanHandle(field model.OptField) bool { return field.SetterTarget != nil }
 
-var setterFuncTemplate = fieldtmpl.Must("setter_func", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
+var setterFuncTemplate = fieldtmpl.Must("setter_func", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.Parameters}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{- if .TargetReturnsError}}
@@ -105,7 +105,7 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 		data.ErrorName = uniqueLocalName("optgenErr", used)
 	}
 
-	return fieldtmpl.Execute(setterFuncTemplate, data)
+	return fieldtmpl.Execute(setterFuncTemplate, &data)
 }
 
 func uniqueParameterName(name string, index int, used map[string]bool) string {

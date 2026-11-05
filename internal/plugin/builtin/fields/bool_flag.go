@@ -49,11 +49,10 @@ func (p *BoolFlagPlugin) Meta() plugin.Meta {
 
 type boolFlagData struct {
 	fieldtmpl.Data
-	FuncPrefix  string
 	CommentVerb string
 }
 
-var boolFlagTemplate = fieldtmpl.Must("bool_flag", `// {{.FuncPrefix}}{{.OptionName}} {{.CommentVerb}} the {{.FieldName}} option.{{.DocComment}}
+var boolFlagTemplate = fieldtmpl.Must("bool_flag", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}() {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		value := true
@@ -62,7 +61,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}() {{.OptionType}}{{.TypeP
 	}
 }`)
 
-var boolSetterTemplate = fieldtmpl.Must("bool_setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
+var boolSetterTemplate = fieldtmpl.Must("bool_setter", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v bool) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		{{.PipelineCode}}{{if not .Final}}{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{end}}
@@ -79,7 +78,7 @@ func (p *BoolFlagPlugin) CanHandle(field model.OptField) bool {
 func (p *BoolFlagPlugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
 	if field.HasModifier("param") {
 		data := fieldtmpl.NewData(ctx, field, values, "v")
-		return fieldtmpl.Execute(boolSetterTemplate, data)
+		return fieldtmpl.Execute(boolSetterTemplate, &data)
 	}
 
 	// Check for invert modifier
@@ -97,5 +96,7 @@ func (p *BoolFlagPlugin) Generate(ctx plugin.GenerationContext, field model.OptF
 		data.CommentVerb = "enables"
 	}
 
-	return fieldtmpl.Execute(boolFlagTemplate, data)
+	data.DocSummary = data.CommentVerb + " the " + field.FieldName + " option."
+
+	return fieldtmpl.Execute(boolFlagTemplate, &data)
 }

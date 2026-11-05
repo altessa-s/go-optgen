@@ -6,6 +6,7 @@ package fieldtmpl
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"text/template"
 
@@ -16,6 +17,9 @@ import (
 // Common defines the shared "optionReturn" template that renders the
 // trailing return of an option function.
 const Common = `
+{{- define "optionDoc" -}}
+{{- if .FullDocComment}}{{.FullDocComment}}{{else}}// {{.FuncPrefix}}{{.OptionName}} {{.DocSummary}}{{.DocComment}}{{end}}
+{{- end -}}
 {{- define "optionReturn" -}}
 {{- if .OptionReturnsError}}
 		return nil
@@ -29,13 +33,60 @@ func Must(name, body string) *template.Template {
 }
 
 // Execute renders tmpl with data into the code of one option function.
+// Option templates must receive a pointer to [BaseData], [Data] or a struct
+// embedding one of them: only then does Execute resolve and validate the
+// option documentation (the field doc used as the full doc, or optgen:doc
+// directives) before rendering.
 func Execute(tmpl *template.Template, data any) (plugin.GeneratedCode, error) {
+	if docData, ok := data.(optionDocData); ok {
+		base := docData.optionDocBase()
+
+		functionName := base.FuncPrefix + base.OptionName
+
+		if base.HasOptionDoc {
+			if !strings.HasPrefix(base.OptionDoc, functionName+" ") {
+				return plugin.GeneratedCode{}, fmt.Errorf("field %s option %s: optgen:doc must start with %s ",
+					base.FieldName, base.OptionName, functionName)
+			}
+
+			base.FullDocComment = fullDocComment(base.OptionDoc)
+		} else if strings.HasPrefix(base.Doc, functionName+" ") {
+			base.FullDocComment = fullDocComment(base.Doc)
+		}
+	}
+
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return plugin.GeneratedCode{}, err
 	}
 
 	return plugin.GeneratedCode{Code: buf.String()}, nil
+}
+
+type optionDocData interface {
+	optionDocBase() *BaseData
+}
+
+func (b *BaseData) optionDocBase() *BaseData { return b }
+
+func fullDocComment(doc string) string {
+	var b strings.Builder
+
+	for line := range strings.Lines(doc) {
+		line = strings.TrimRight(line, "\r\n")
+
+		b.WriteString("\n//")
+
+		if line != "" {
+			if !strings.HasPrefix(line, "\t") {
+				b.WriteByte(' ')
+			}
+
+			b.WriteString(line)
+		}
+	}
+
+	return b.String()
 }
 
 // BaseData carries the field and the option type identity shared by every
@@ -52,6 +103,8 @@ type BaseData struct {
 	SliceParam         bool   // Slice options take a slice instead of variadic elements
 	MarkSet            string // Statement recording the applied option, or empty
 	DocComment         string // Field documentation as comment lines following the summary, or empty
+	FullDocComment     string // Complete option documentation, or empty for the generated summary
+	DocSummary         string // Generated summary after the function name
 }
 
 // NewBaseData collects the template data for field from ctx.
@@ -68,6 +121,7 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 		SliceParam:         ctx.SliceSetter == model.SliceSetterSlice,
 		MarkSet:            markSet(ctx, field),
 		DocComment:         docComment(field.Doc),
+		DocSummary:         "sets the " + field.FieldName + " option.",
 	}
 }
 

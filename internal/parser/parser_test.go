@@ -6,6 +6,7 @@ package parser_test
 
 import (
 	"go/ast"
+	"go/format"
 	"go/token"
 	"strings"
 	"testing"
@@ -159,6 +160,79 @@ func TestFindOptFields_TaggedFields(t *testing.T) {
 		"vaultApi": {Path: "github.com/hashicorp/vault/api", Alias: "vaultApi"},
 	}, result.Imports)
 	require.False(t, result.GenericInfo.IsGeneric())
+}
+
+func TestFindOptFields_OptionDocs(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `package sample
+type options struct {
+	// Ordinary field documentation.
+	//optgen:doc A WithA starts the A option.
+	//optgen:doc A
+	//optgen:doc A \tExample()
+	a, b int ~optgen:""~
+}
+`})
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+
+	a := fieldByOption(t, result.Fields, "A")
+	b := fieldByOption(t, result.Fields, "B")
+	require.Equal(t, "Ordinary field documentation.", a.Doc)
+	require.Equal(t, "WithA starts the A option.\n\n\\tExample()", a.OptionDoc)
+	require.True(t, a.HasOptionDoc)
+	require.False(t, b.HasOptionDoc)
+}
+
+func TestFindOptFields_OptionDocsUnknownOption(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `package sample
+type options struct {
+	//optgen:doc Missing WithMissing docs.
+	a int ~optgen:""~
+}
+`})
+	_, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.ErrorContains(t, err, "field a: optgen:doc names option Missing that this field does not produce")
+}
+
+func TestFindOptFields_OptionDocPreservesLeadingTab(t *testing.T) {
+	t.Parallel()
+
+	fixture := "package sample\ntype options struct {\n//optgen:doc A WithA starts here.\n//optgen:doc A " + "\t" + "code()\na int `optgen:\"\"`\n}\n"
+	pkg := parsePackage(t, map[string]string{"options.go": fixture})
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+	require.Equal(t, "WithA starts here.\n\tcode()", fieldByOption(t, result.Fields, "A").OptionDoc)
+}
+
+func TestFindOptFields_OptionDocsSurviveGoFormat(t *testing.T) {
+	t.Parallel()
+
+	source := `package sample
+type options struct {
+	// Human description.
+	//optgen:doc A WithA first line.
+	//optgen:doc A second line.
+	a int ~optgen:""~
+}
+`
+	parse := func(src string) []model.OptField {
+		pkg := parsePackage(t, map[string]string{"options.go": src})
+		result, err := parser.FindOptFields(pkg, "options", false, nil)
+		require.NoError(t, err)
+
+		return result.Fields
+	}
+
+	before := parse(source)
+	formatted, err := format.Source([]byte(src(source)))
+	require.NoError(t, err)
+
+	after := parse(strings.ReplaceAll(string(formatted), "`", "~"))
+	require.Equal(t, before, after)
 }
 
 func TestFindOptFields_ProcessAllFields(t *testing.T) {

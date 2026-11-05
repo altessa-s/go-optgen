@@ -75,6 +75,32 @@ func TestExecuteSuccess(t *testing.T) {
 	require.Empty(t, out.Helpers)
 }
 
+func TestExecuteUsesFullOptionDocumentation(t *testing.T) {
+	t.Parallel()
+
+	tmpl := template.Must(template.New("doc").Parse(`{{if .FullDocComment}}{{.FullDocComment}}{{else}}summary{{.DocComment}}{{end}}`))
+	base := fieldtmpl.BaseData{FieldName: "name", OptionName: "ClientName", Doc: "SetClientName selects a client.\nDetails.", FuncPrefix: "Set"}
+	out, err := fieldtmpl.Execute(tmpl, &base)
+	require.NoError(t, err)
+	require.Equal(t, "\n// SetClientName selects a client.\n// Details.", out.Code)
+
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	base = fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "name", OptionName: "ClientName", Doc: "A field description."})
+	base.FuncPrefix = "Set"
+	out, err = fieldtmpl.Execute(tmpl, &base)
+	require.NoError(t, err)
+	require.Equal(t, "summary\n//\n// A field description.", out.Code)
+}
+
+func TestExecuteRejectsOptionDocumentationWithWrongFunctionName(t *testing.T) {
+	t.Parallel()
+
+	tmpl := template.Must(template.New("doc").Parse(`{{.FullDocComment}}`))
+	base := fieldtmpl.BaseData{FieldName: "name", OptionName: "ClientName", HasOptionDoc: true, OptionDoc: "WithClientName selects a client.", FuncPrefix: "Set"}
+	_, err := fieldtmpl.Execute(tmpl, &base)
+	require.ErrorContains(t, err, "field name option ClientName: optgen:doc must start with SetClientName ")
+}
+
 // stubPipeline returns a fixed pipeline result.
 type stubPipeline plugin.PipelineResult
 
@@ -94,7 +120,7 @@ func TestNewDataIndentsPipelineCode(t *testing.T) {
 	require.Equal(t, "out", data.ValueExpr)
 	require.True(t, data.Final)
 	require.Equal(t, fieldtmpl.BaseData{OptField: field, TypeName: "options", OptionType: "Option", OptionReturnsError: true,
-		TypeParamsDecl: "[T any]", TypeParamsNames: "[T]", FuncPrefix: "With"}, data.BaseData)
+		TypeParamsDecl: "[T any]", TypeParamsNames: "[T]", FuncPrefix: "With", DocSummary: "sets the name option."}, data.BaseData)
 
 	require.Empty(t, fieldtmpl.NewData(ctx, field, stubPipeline{ValueVar: "v"}, "v").PipelineCode)
 }

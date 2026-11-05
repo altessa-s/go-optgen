@@ -32,6 +32,25 @@ type options struct {
 
 Target parameter types and variadic behavior come from Go type information. `optfn` fields cannot use `opt:"-"`, `optval`, or `optcheck`.
 
+## Documentation
+
+Generated options use a field's complete godoc when it starts with the final generated function name and a space. For example, `WithTimeout controls...`
+documents `WithTimeout` directly; `WithoutValidation disables...` works for an inverted bool option. This works with every field plugin.
+
+For fields that produce multiple options, including multi-target `optfn`, use `//optgen:doc <Option> <text>` lines in the field comment. Each option's
+directive lines are joined in order and form the complete function doc. The first line must start with the final function name and a space. A directive
+without text adds an empty doc line, and a tab at the start of the text is preserved for godoc code examples.
+
+```go
+type options struct {
+	//optgen:doc Exact WithExact sets the exact field mapping.
+	//optgen:doc Prefix WithPrefix sets the prefix field mapping.
+	mapping Mapping `optfn:"Exact=.WithExact, Prefix=.WithPrefix"`
+}
+```
+
+The final name includes `--option-prefix` and the function prefix configured by `--func-prefix`; inverted bool options use `--invert-func-prefix`.
+
 ## Option naming
 
 For fields selected by `--all-fields`, `all-fields: true`, or an `optgen`/`optval`/`optcheck`/`optfn` tag, an omitted `opt` tag derives the option name from the

@@ -46,7 +46,7 @@ func (p *NetIPParsePlugin) CanHandle(field model.OptField) bool {
 }
 
 var netIPParseTemplate = fieldtmpl.Must("net-ip-parse",
-	`// {{.FuncPrefix}}{{.OptionName}} {{if .Append}}appends to{{else}}sets{{end}} the {{.FieldName}} option.{{.DocComment}}
+	`{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v ...string) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		netIPs := make([]net.IP, 0, len(v))
@@ -98,6 +98,9 @@ func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.Op
 		Append:  appendMode,
 		ErrExpr: errExpr,
 	}
+	if appendMode {
+		data.DocSummary = "appends to the " + field.FieldName + " option."
+	}
 
-	return fieldtmpl.Execute(netIPParseTemplate, data)
+	return fieldtmpl.Execute(netIPParseTemplate, &data)
 }

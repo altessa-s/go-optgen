@@ -41,7 +41,7 @@ func (p *SliceSetPlugin) CanHandle(field model.OptField) bool {
 	return true
 }
 
-var sliceSetTemplate = fieldtmpl.Must("slice-set", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
+var sliceSetTemplate = fieldtmpl.Must("slice-set", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
@@ -52,5 +52,5 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{if .SliceParam}}{{.Ty
 // Generate renders the option function for field.
 func (p *SliceSetPlugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
 	data := fieldtmpl.NewData(ctx, field, values, "v")
-	return fieldtmpl.Execute(sliceSetTemplate, data)
+	return fieldtmpl.Execute(sliceSetTemplate, &data)
 }

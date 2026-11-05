@@ -12,7 +12,7 @@ Package `fieldtmpl` provides templates and option data shared by the built-in [f
 |------------|--------------------------------------------------------------------|
 | `Must`     | Parses a field template with the shared `optionReturn` definition  |
 | `Execute`  | Renders one option function                                        |
-| `BaseData` | Field and option type identity, field doc as `DocComment`          |
+| `BaseData` | Field and option type identity, ordinary and complete option docs |
 | `Data`     | `BaseData` plus pipeline code, final value, and termination flag   |
 | `NewData`  | Runs the value pipeline for a field and builds `Data`              |
 
@@ -27,3 +27,7 @@ func (p *Plugin) Generate(ctx plugin.GenerationContext, field model.OptField, va
 ```
 
 See [architecture](../../../../docs/architecture.md) for dependency rules and [plugin API](../../../../plugin/README.md) for extension contracts.
+
+`Execute` applies a full function doc from `OptField.OptionDoc` or from a field doc that starts with the final function name plus a space. It validates
+directive text after the function and semantic option prefixes are known. With neither form, templates render the original generated summary and field
+doc paragraph unchanged.

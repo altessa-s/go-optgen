@@ -33,6 +33,8 @@ package rather than any internal package to access the types they receive and pr
 | `TypeImports` | Typed import paths and aliases resolved by syntax extraction |
 | `BareChecks` | Check keys declared without an explicit value |
 | `Doc`          | Documentation comment from the field                                                          |
+| `OptionDoc` | Complete documentation for one generated option from `//optgen:doc`; populated per expanded option |
+| `HasOptionDoc` | Whether an explicit option doc was supplied, including an empty directive line |
 | `ElemType`     | Element type for slices (without `[]`)                                                        |
 | `Modifiers`    | Merged automatic and explicit `optval` modifiers, excluding disablers (e.g. `["trimspaces", "lower"]`)                         |
 | `Metadata`     | Flags and `key=value` pairs from the `optgen` tag (e.g. `append`, `notnil`)                   |

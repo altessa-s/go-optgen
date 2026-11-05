@@ -283,6 +283,12 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 
 	// Extract documentation
 	doc := extractFieldDoc(field)
+
+	optionDocs, err := extractOptionDocs(field)
+	if err != nil {
+		return nil, err
+	}
+
 	modifiers := parsed.Modifiers
 	isInterface := IsInterfaceType(field.Type)
 	isNilable := IsNilableType(field.Type)
@@ -346,7 +352,65 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 		out = append(out, targetFields...)
 	}
 
+	for optionName, optionDoc := range optionDocs {
+		found := false
+
+		for i := range out {
+			if out[i].OptionName != optionName {
+				continue
+			}
+
+			out[i].OptionDoc = optionDoc
+			out[i].HasOptionDoc = true
+			found = true
+		}
+
+		if !found {
+			return nil, fmt.Errorf("field %s: optgen:doc names option %s that this field does not produce", field.Names[0].Name, optionName)
+		}
+	}
+
 	return out, nil
+}
+
+func extractOptionDocs(field *ast.Field) (map[string]string, error) {
+	if field.Doc == nil {
+		return map[string]string{}, nil
+	}
+
+	docs := make(map[string][]string)
+
+	for _, comment := range field.Doc.List {
+		text := strings.TrimPrefix(comment.Text, "//")
+
+		if !strings.HasPrefix(text, "optgen:doc ") {
+			continue
+		}
+
+		optionAndText := strings.TrimPrefix(text, "optgen:doc ")
+		option, docLine, hasText := strings.Cut(optionAndText, " ")
+
+		if option == "" {
+			return nil, fmt.Errorf("field %s: optgen:doc requires an option name", field.Names[0].Name)
+		}
+
+		if !hasText {
+			docLine = ""
+		}
+
+		docs[option] = append(docs[option], docLine)
+	}
+
+	if len(docs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	joined := make(map[string]string, len(docs))
+	for option, lines := range docs {
+		joined[option] = strings.Join(lines, "\n")
+	}
+
+	return joined, nil
 }
 
 func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed parsedFieldTags) error {

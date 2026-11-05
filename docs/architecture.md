@@ -22,7 +22,7 @@ flowchart TD
 
 | Package | Responsibility | Allowed inner dependencies |
 |---------|----------------|----------------------------|
-| `model` | Generation data, field declarations, import information, resolved setter signatures | Standard library |
+| `model` | Generation data, field declarations and option docs, import information, resolved setter signatures | Standard library |
 | `plugin` | Extension contracts, explicit catalogs, pipeline execution | `model` |
 | `internal/application` | Parse, prepare, render, publish through ports | `model` |
 | `internal/parser` | Extract syntax without applying plugin policies; resolves `optfn` targets through the type resolver port | `model`, `internal/naming` |
@@ -70,6 +70,11 @@ function is a generator-side interface. `GenerationContext` carries generation d
 The `optfn` syntax is parsed into one `OptField` per target. The source adapter resolves function expressions with `types.Eval` at the field position and
 methods with `types.LookupFieldOrMethod`; the model carries only signature strings, variadic flags, and generated imports. Function-backed setters do not
 build the value pipeline. Defaults are deduplicated by field before rendering because multiple targets can share one field.
+
+The parser extracts `//optgen:doc` lines from raw comment groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. The
+generator validates complete directive docs against the final function name after semantic option-prefix preparation, using the render settings for
+function prefixes. `fieldtmpl` also detects a field doc that starts with that function name and uses it as the complete doc; all field plugins share this
+behavior through their common templates.
 
 The CLI registers only the built-in plugins; external shared objects are not loaded. Plugin implementations must keep per-generation mutable state
 in the generation context, not in package globals or shared plugin instances.

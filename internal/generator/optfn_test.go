@@ -57,6 +57,123 @@ func TestGenerator_Optfn(t *testing.T) {
 	})
 }
 
+func TestGenerator_OptionDocUsesPreparedOptionPrefix(t *testing.T) {
+	t.Parallel()
+
+	r := testRegistry()
+	fields, err := semantic.New(r, semantic.WithPrefix("Client")).Prepare([]model.OptField{{
+		FieldName: "name", OptionName: "Name", Type: "string", Doc: "SetClientName selects the client name.",
+	}})
+	require.NoError(t, err)
+
+	g := generator.New(r, plugin.NewPipeline(r))
+	got, err := g.Generate(model.GenerateInput{
+		TypeName:            "options",
+		OptionType:          "Option",
+		FuncPrefix:          "Set",
+		GenerateOptionType:  true,
+		GenerateDefaultFunc: true,
+		GenerateNewFunc:     true,
+		DefaultFuncName:     "defaultOptions",
+		NewFuncName:         "newOptions",
+		PackageName:         "sample",
+		Fields:              fields,
+	})
+	require.NoError(t, err)
+	compareOptionDocsGolden(t, got, "options_gen_prefix.golden")
+	typeCheckGeneratedSource(t, got)
+}
+
+func typeCheckGeneratedSource(tb testing.TB, generated []byte) {
+	tb.Helper()
+
+	fset := token.NewFileSet()
+	input, err := parser.ParseFile(fset, "options.go", "package sample\ntype options struct { name string }", 0)
+	require.NoError(tb, err)
+	file, err := parser.ParseFile(fset, "options_gen.go", generated, 0)
+	require.NoError(tb, err)
+	_, err = (&types.Config{Importer: importer.Default()}).Check("sample", fset, []*ast.File{input, file}, nil)
+	require.NoError(tb, err, "generated source must type-check")
+}
+
+func TestGenerator_OptionDocRequiresFinalFunctionName(t *testing.T) {
+	t.Parallel()
+
+	r := testRegistry()
+	fields, err := semantic.New(r, semantic.WithPrefix("Client")).Prepare([]model.OptField{{
+		FieldName: "name", OptionName: "Name", Type: "string", HasOptionDoc: true, OptionDoc: "WithClientName selects the client name.",
+	}})
+	require.NoError(t, err)
+
+	g := generator.New(r, plugin.NewPipeline(r))
+	_, err = g.Generate(model.GenerateInput{
+		TypeName:    "options",
+		OptionType:  "Option",
+		FuncPrefix:  "Set",
+		PackageName: "sample",
+		Fields:      fields,
+	})
+	require.ErrorContains(t, err, "field name option ClientName: optgen:doc must start with SetClientName ")
+}
+
+func TestGenerator_OptionDocs(t *testing.T) {
+	t.Parallel()
+
+	got, err := generateOptionDocs(t)
+	require.NoError(t, err)
+	compareOptionDocsGolden(t, got, "options_gen.golden")
+	typeCheckOptionDocsGenerated(t, got)
+}
+
+func generateOptionDocs(tb testing.TB) ([]byte, error) {
+	tb.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(tb, ok)
+
+	dir := filepath.Join(filepath.Dir(thisFile), "testdata/option_docs")
+	packages, err := (source.Reader{}).Parse(tb.Context(), dir, "options", false)
+	require.NoError(tb, err)
+	require.Len(tb, packages, 1)
+
+	r := testRegistry()
+	fields, err := semantic.New(r).Prepare(packages[0].Fields)
+	require.NoError(tb, err)
+
+	g := generator.New(r, plugin.NewPipeline(r))
+
+	return g.Generate(model.GenerateInput{
+		TypeName:            "options",
+		OptionType:          "Option",
+		FuncPrefix:          "Set",
+		GenerateOptionType:  true,
+		GenerateDefaultFunc: true,
+		GenerateNewFunc:     true,
+		DefaultFuncName:     "defaultOptions",
+		NewFuncName:         "newOptions",
+		PackageName:         packages[0].Name,
+		Fields:              fields,
+		Imports:             packages[0].Imports,
+		GenericInfo:         packages[0].GenericInfo,
+	})
+}
+
+func typeCheckOptionDocsGenerated(tb testing.TB, generated []byte) {
+	tb.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(tb, ok)
+
+	dir := filepath.Join(filepath.Dir(thisFile), "testdata/option_docs")
+	fset := token.NewFileSet()
+	input, err := parser.ParseFile(fset, filepath.Join(dir, "input.go"), nil, 0)
+	require.NoError(tb, err)
+	output, err := parser.ParseFile(fset, "options_gen.go", generated, 0)
+	require.NoError(tb, err)
+	_, err = (&types.Config{Importer: importer.Default()}).Check(input.Name.Name, fset, []*ast.File{input, output}, nil)
+	require.NoError(tb, err, "generated option docs fixture must type-check")
+}
+
 func generateOptfnErrorFixture(tb testing.TB, optionError bool) ([]byte, error) {
 	tb.Helper()
 
@@ -148,6 +265,24 @@ func compareOptfnGolden(tb testing.TB, got []byte, golden string) {
 	}
 
 	want, err := os.ReadFile(goldenPath)
+	require.NoError(tb, err)
+	require.Equal(tb, string(want), string(got))
+}
+
+func compareOptionDocsGolden(tb testing.TB, got []byte, golden string) {
+	tb.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(tb, ok)
+
+	dir := filepath.Join(filepath.Dir(thisFile), "testdata/option_docs")
+	path := filepath.Join(dir, golden)
+
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		require.NoError(tb, os.WriteFile(path, got, 0o644))
+	}
+
+	want, err := os.ReadFile(path)
 	require.NoError(tb, err)
 	require.Equal(tb, string(want), string(got))
 }

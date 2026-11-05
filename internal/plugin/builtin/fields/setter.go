@@ -47,7 +47,7 @@ func (p *DefaultSetterPlugin) Meta() plugin.Meta {
 	}
 }
 
-var setterTemplate = fieldtmpl.Must("setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
+var setterTemplate = fieldtmpl.Must("setter", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}{{if .SkipEmpty}}		if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
@@ -56,7 +56,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionTyp
 	}
 }`)
 
-var stringSetterTemplate = fieldtmpl.Must("string_setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
+var stringSetterTemplate = fieldtmpl.Must("string_setter", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}[T interface{string|*string}](v T) {{.OptionType}} {
  return func(o *{{.TypeName}}){{if .OptionReturnsError}} error{{end}} {
  var value string
@@ -95,12 +95,12 @@ func (p *DefaultSetterPlugin) Generate(ctx plugin.GenerationContext, field model
 		SkipEmpty: field.Type == "string" && ctx.StringSetter == model.StringSetterPlain && !ctx.KeepEmptyStrings,
 	}
 
-	return fieldtmpl.Execute(setterTemplate, data)
+	return fieldtmpl.Execute(setterTemplate, &data)
 }
 
 func (p *DefaultSetterPlugin) generateStringSetter(
 	ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline,
 ) (plugin.GeneratedCode, error) {
 	data := fieldtmpl.NewData(ctx, field, values, "value")
-	return fieldtmpl.Execute(stringSetterTemplate, data)
+	return fieldtmpl.Execute(stringSetterTemplate, &data)
 }
