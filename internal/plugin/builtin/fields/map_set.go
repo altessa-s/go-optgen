@@ -31,10 +31,11 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(
 ) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{if .Append}}        if len({{.ValuesParam}}) == 0 { return{{if .OptionReturnsError}} nil{{end}} }
+        {{.MarkSet}}
         if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
-{{else}}        o.{{.FieldName}} = make({{.Type}}, len({{.ValuesParam}}))
+{{else}}        {{.MarkSet}}o.{{.FieldName}} = make({{.Type}}, len({{.ValuesParam}}))
 {{end}}        for _, key := range {{.ValuesParam}} { o.{{.FieldName}}[key] = struct{}{} }
-        {{.PostAssignment}}{{.MarkSet}}{{template "optionReturn" .}}
+        {{.PostAssignment}}{{template "optionReturn" .}}
 	}
 }`)
 

@@ -19,6 +19,7 @@ type TypeFacts struct {
 	Numeric         bool // The underlying type is an integer or floating-point type
 	Comparable      bool // Values of the type are comparable
 	MapKeyType      string
+	MapKeyString    bool
 	MapValueType    string
 	MapValueNilable bool
 }

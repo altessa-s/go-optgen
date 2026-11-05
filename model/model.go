@@ -30,6 +30,7 @@ type OptField struct {
 	IsSlice         bool              // Whether the field is a slice type
 	IsMap           bool              // Whether the field is a map type
 	MapKeyType      string            // Key type for maps
+	MapKeyString    bool              // Whether the map key's underlying type is string
 	MapValueType    string            // Value type for maps
 	MapValueNilable bool              // Whether map values can be nil
 	IsInterface     bool              // Whether the field is an interface type

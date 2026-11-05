@@ -114,19 +114,10 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 	mark := markSet(ctx, field)
 
 	post := postAssignment(ctx, field)
-	if post != "" {
-		post += mark
-		mark = ""
-	}
 
 	doc := field.Doc
 
-	functionPrefix := ctx.OptionFuncPrefix()
-	if field.HasModifier("invert") {
-		functionPrefix = ctx.OptionInvertFuncPrefix()
-	}
-
-	if field.Metadata["multiopt"] == "true" && startsWithOptionFunction(doc, functionPrefix) {
+	if field.Metadata["multiopt"] == "true" && startsWithGeneratedOptionFunction(doc, ctx, field) {
 		doc = ""
 	}
 
@@ -147,27 +138,24 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 	}
 }
 
-func startsWithOptionFunction(doc, prefix string) bool {
-	if !strings.HasPrefix(doc, prefix) {
-		return false
-	}
-
-	rest := strings.TrimPrefix(doc, prefix)
-	for i := 0; i < len(rest); i++ {
-		if rest[i] == ' ' {
-			return i > 0
+func startsWithGeneratedOptionFunction(doc string, ctx plugin.GenerationContext, field model.OptField) bool {
+	for _, candidate := range ctx.AllFields {
+		if candidate.FieldName != field.FieldName {
+			continue
 		}
 
-		if !optionDocIdentifier(rest[i]) {
-			return false
+		prefix := ctx.OptionFuncPrefix()
+		if candidate.HasModifier("invert") {
+			prefix = ctx.OptionInvertFuncPrefix()
+		}
+
+		functionName := prefix + candidate.OptionName
+		if strings.HasPrefix(doc, functionName+" ") || strings.HasPrefix(doc, functionName+"\n") {
+			return true
 		}
 	}
 
 	return false
-}
-
-func optionDocIdentifier(value byte) bool {
-	return value == '_' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' || value >= '0' && value <= '9'
 }
 
 func postAssignment(ctx plugin.GenerationContext, field model.OptField) string {

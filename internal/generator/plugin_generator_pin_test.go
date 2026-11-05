@@ -24,7 +24,7 @@ func TestSourceImports_Pin(t *testing.T) {
 		f := typeExpr(t, "mo.ClientOptions")
 		f.TypeImports = []model.GeneratedImport{{Path: "go.mongodb.org/mongo-driver/v2/mongo/options", Alias: "mo"}}
 		local := map[string]model.ImportInfo{"mo": {Path: "go.mongodb.org/mongo-driver/v2/mongo/options", Alias: "mo"}}
-		got := sourceImports([]model.OptField{f}, local, map[string]bool{f.FieldName: true})
+		got := sourceImports([]model.OptField{f}, local, map[string]bool{f.FieldName: true}, nil, nil)
 		require.Equal(t, []model.GeneratedImport{{Path: "go.mongodb.org/mongo-driver/v2/mongo/options", Alias: "mo"}}, got)
 	})
 
@@ -33,7 +33,7 @@ func TestSourceImports_Pin(t *testing.T) {
 
 		f := model.OptField{FieldName: "cfg", Default: "api.DefaultConfig()"}
 		local := map[string]model.ImportInfo{"vaultApi": {Path: "github.com/hashicorp/vault/api", Alias: "vaultApi"}}
-		got := sourceImports([]model.OptField{f}, local, nil)
+		got := sourceImports([]model.OptField{f}, local, nil, nil, nil)
 		require.Equal(t, []model.GeneratedImport{{Path: "github.com/hashicorp/vault/api", Alias: "vaultApi"}}, got)
 	})
 
@@ -43,7 +43,7 @@ func TestSourceImports_Pin(t *testing.T) {
 		f1.TypeImports = []model.GeneratedImport{{Path: "time"}}
 		f2 := model.OptField{FieldName: "at", Default: "t.Second"}
 		local := map[string]model.ImportInfo{"time": {Path: "time"}, "t": {Path: "time", Alias: "t"}}
-		got := sourceImports([]model.OptField{f1, f2}, local, map[string]bool{f1.FieldName: true})
+		got := sourceImports([]model.OptField{f1, f2}, local, map[string]bool{f1.FieldName: true}, nil, nil)
 		require.Equal(t, []model.GeneratedImport{{Path: "time", Alias: "t"}}, got)
 	})
 
@@ -53,7 +53,7 @@ func TestSourceImports_Pin(t *testing.T) {
 		f := model.OptField{FieldName: "addr", Default: `"a.b" + x.Y + ` + "`c.d` + string('e') + \"f\\\".g\""}
 		local := map[string]model.ImportInfo{"a": {Path: "example.com/a"}, "c": {Path: "example.com/c"}, "g": {Path: "example.com/g"},
 			"x": {Path: "example.com/x"}}
-		got := sourceImports([]model.OptField{f}, local, nil)
+		got := sourceImports([]model.OptField{f}, local, nil, nil, nil)
 		require.Equal(t, []model.GeneratedImport{{Path: "example.com/x"}}, got)
 	})
 
@@ -64,7 +64,7 @@ func TestSourceImports_Pin(t *testing.T) {
 		f2 := typeExpr(t, "b.T")
 		f2.TypeImports = []model.GeneratedImport{{Path: "example.com/b"}}
 		local := map[string]model.ImportInfo{"x": {}, "z": {Path: "example.com/z"}, "b": {Path: "example.com/b"}}
-		got := sourceImports([]model.OptField{f1, f2}, local, map[string]bool{f2.FieldName: true})
+		got := sourceImports([]model.OptField{f1, f2}, local, map[string]bool{f2.FieldName: true}, nil, nil)
 		require.Equal(t, []model.GeneratedImport{{Path: "example.com/b"}, {Path: "example.com/z"}}, got)
 	})
 }
@@ -75,6 +75,22 @@ func TestSourceImportsCheckAndErrorExpressions(t *testing.T) {
 	field := model.OptField{Checks: map[string]string{"min": "limits.MaxPayload"}, Metadata: map[string]string{"err": "limits.ErrInvalid"}}
 	imports := sourceImports([]model.OptField{field}, map[string]model.ImportInfo{
 		"limits": {Path: "example.com/limits", Alias: "limits"},
-	}, nil)
+	}, nil, map[string]bool{"": true}, nil)
+	require.Equal(t, []model.GeneratedImport{{Path: "example.com/limits", Alias: "limits"}}, imports)
+}
+
+func TestSourceImportsOnlyIncludesEmittedCheckAndErrorExpressions(t *testing.T) {
+	t.Parallel()
+
+	local := map[string]model.ImportInfo{"limits": {Path: "example.com/limits", Alias: "limits"}}
+	field := model.OptField{FieldName: "mode", Checks: map[string]string{"oneof": "limits.A"}, Metadata: map[string]string{"manual": "true", "err": "limits.ErrInvalid", "parseip": "true"}}
+
+	imports := sourceImports([]model.OptField{field}, local, nil, nil, nil)
+	require.Empty(t, imports)
+
+	imports = sourceImports([]model.OptField{field}, local, nil, map[string]bool{"mode": true}, nil)
+	require.Equal(t, []model.GeneratedImport{{Path: "example.com/limits", Alias: "limits"}}, imports)
+
+	imports = sourceImports([]model.OptField{field}, local, map[string]bool{"mode": true}, nil, map[string]bool{"mode": true})
 	require.Equal(t, []model.GeneratedImport{{Path: "example.com/limits", Alias: "limits"}}, imports)
 }

@@ -178,6 +178,11 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 	case *types.Map:
 		facts.Nilable = true
 		facts.MapKeyType = types.TypeString(u.Key(), nil)
+
+		if key, ok := types.Unalias(u.Key()).Underlying().(*types.Basic); ok {
+			facts.MapKeyString = key.Kind() == types.String
+		}
+
 		facts.MapValueType = types.TypeString(u.Elem(), nil)
 		facts.MapValueNilable = typeNilable(u.Elem())
 	case *types.Basic:

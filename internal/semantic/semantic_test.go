@@ -74,6 +74,16 @@ func TestPrepareNormalizesMinAndSuppressesDurationPositiveDefault(t *testing.T) 
 	require.NotContains(t, prepared[0].Modifiers, "positive")
 }
 
+func TestPrepareSuppressesPositiveForCaseInsensitiveMinCheck(t *testing.T) {
+	t.Parallel()
+	r := builtinRegistry(t)
+	prepared, err := semantic.New(r).Prepare([]model.OptField{{FieldName: "retries", Type: "int", IsNumeric: true,
+		Checks: map[string]string{"Min": "0"}}})
+	require.NoError(t, err)
+	require.Equal(t, "0", prepared[0].Checks["min"])
+	require.NotContains(t, prepared[0].Modifiers, "positive")
+}
+
 func TestPrepareInputValidatesEnablesAndResets(t *testing.T) {
 	t.Parallel()
 	r := builtinRegistry(t)

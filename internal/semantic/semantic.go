@@ -62,9 +62,7 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		optionName := f.OptionName
 
 		f.OptionName = p.options.prefix + optionName
-		if f.HasOptionDoc && p.options.prefix != "" {
-			f.OptionDoc = prefixOptionDoc(f.OptionDoc, optionName, f.OptionName)
-		}
+		prefixOptionDocumentation(f, optionName, f.OptionName, p.options.prefix)
 
 		if f.Metadata["manual"] != metadataTrue && !f.Mandatory && !f.DefaultOnly && f.OptionName != "" {
 			if previous, exists := optionNames[f.OptionName]; exists {
@@ -109,13 +107,34 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 	return out, nil
 }
 
+func prefixOptionDocumentation(field *model.OptField, oldName, newName, prefix string) {
+	if prefix == "" {
+		return
+	}
+
+	if field.HasOptionDoc {
+		field.OptionDoc = prefixOptionDoc(field.OptionDoc, oldName, newName)
+		return
+	}
+
+	if field.Metadata["multiopt"] != metadataTrue {
+		field.Doc = prefixOptionDoc(field.Doc, oldName, newName)
+	}
+}
+
 func prefixOptionDoc(doc, oldName, newName string) string {
-	functionName, rest, ok := strings.Cut(doc, " ")
-	if !ok || strings.HasSuffix(functionName, newName) || !strings.HasSuffix(functionName, oldName) {
+	boundary := strings.IndexFunc(doc, unicode.IsSpace)
+	if boundary <= 0 {
 		return doc
 	}
 
-	return strings.TrimSuffix(functionName, oldName) + newName + " " + rest
+	functionName := doc[:boundary]
+
+	if strings.HasSuffix(functionName, newName) || !strings.HasSuffix(functionName, oldName) {
+		return doc
+	}
+
+	return strings.TrimSuffix(functionName, oldName) + newName + doc[boundary:]
 }
 
 // maxIsSetFields is the capacity of the uint64 field set behind WithIsSet.
@@ -177,10 +196,19 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 		}
 
 		value := f.Checks[key]
+
+		canonicalKey := spec.Key
+		if canonicalKey == "" {
+			canonicalKey = strings.ToLower(key)
+		}
+
+		delete(checks, key)
+
 		if strings.EqualFold(key, "min") {
 			value = p.catalog.NormalizeDefault(f.Type, value)
-			checks[key] = value
 		}
+
+		checks[canonicalKey] = value
 
 		if spec.RequiresValue && (f.BareChecks[key] || strings.TrimSpace(value) == "") {
 			return fmt.Errorf("field %s: optcheck %s requires a value", f.FieldName, key)

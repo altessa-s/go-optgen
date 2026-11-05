@@ -417,6 +417,7 @@ func TestFindOptFields_CollectionTagValidation(t *testing.T) {
 		{name: "set map with value", typ: "map[string]int", tag: `optgen:"set"`, wanted: "optgen set requires map[K]struct{}"},
 		{name: "put non map", typ: "string", tag: `optgen:"put"`, wanted: "optgen put requires a map field"},
 		{name: "clone scalar", typ: "int", tag: `optval:"clone"`, wanted: "optval clone requires a slice or map field"},
+		{name: "clone fixed array", typ: "[16]byte", tag: `optval:"clone"`, wanted: "optval clone requires a slice or map field"},
 		{name: "put checks", typ: "map[string]int", tag: `optgen:"put" optcheck:"minlen=1"`, wanted: "optgen put cannot be combined with optcheck"},
 		{name: "set modifiers", typ: "map[string]struct{}", tag: `optgen:"set" optval:"clone"`, wanted: "optgen set cannot be combined with optval"},
 		{name: "invalid clone mode", typ: "[]string", tag: `optval:"clone=invalid"`, wanted: "unsupported clone mode"},

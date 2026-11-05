@@ -42,7 +42,7 @@ package rather than any internal package to access the types they receive and pr
 | `Checks`       | Validation rules from the `optcheck` tag (e.g. `{"required":"", "minlen":"3"}`)               |
 | `CheckValueValid` | Type-check result for oneof constants and min bounds when source type information is available |
 | `IsSlice`      | Whether the field is a slice type                                                             |
-| `IsMap`        | Whether the field is a map type; `MapKeyType`, `MapValueType`, and `MapValueNilable` describe its entries |
+| `IsMap`        | Whether the field is a map type; `MapKeyType`, `MapKeyString`, `MapValueType`, and `MapValueNilable` describe its entries |
 | `IsInterface`  | Whether the field is an interface type                                                        |
 | `IsNilable`    | Whether the field type can be nil (pointer, slice, map, interface, chan, func)                 |
 | `TypeResolved` | Type checking resolved the type, so the type facts are exact rather than inferred from syntax |

@@ -28,10 +28,14 @@ func {{.FuncPrefix}}{{.OptionName}}`+
 	`{{.TypeParamsDecl}}({{.KeyParam}} {{.MapKeyType}}, `+
 	`{{.ValueParam}} {{.MapValueType}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
+{{- if .MapKeyString}}
 		var zeroKey {{.MapKeyType}}
 		if {{.KeyParam}} == zeroKey { return{{if .OptionReturnsError}} nil{{end}} }
-{{if .MapValueNilable}}		if {{.ValueParam}} == nil { return{{if .OptionReturnsError}} nil{{end}} }
-{{end}}		if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
+{{- end}}
+{{- if .MapValueNilable}}
+		if {{.ValueParam}} == nil { return{{if .OptionReturnsError}} nil{{end}} }
+{{- end}}
+		if o.{{.FieldName}} == nil { o.{{.FieldName}} = make({{.Type}}) }
 		{{.MarkSet}}o.{{.FieldName}}[{{.KeyParam}}] = {{.ValueParam}}{{if .PostAssignment}}
 		{{.PostAssignment}}{{end}}
 		{{template "optionReturn" .}}

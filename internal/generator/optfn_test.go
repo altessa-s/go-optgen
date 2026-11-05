@@ -113,7 +113,7 @@ func TestGenerator_OptionDocUsesPreparedOptionPrefix(t *testing.T) {
 
 	r := testRegistry()
 	fields, err := semantic.New(r, semantic.WithPrefix("Client")).Prepare([]model.OptField{{
-		FieldName: "name", OptionName: "Name", Type: "string", Doc: "SetClientName selects the client name.",
+		FieldName: "name", OptionName: "Name", Type: "string", Doc: "SetName selects the client name.",
 	}})
 	require.NoError(t, err)
 

@@ -77,6 +77,8 @@ its `token.FileSet` and `types.Package` private. Map fields also carry
 rendered key and value types plus value nilability for put setters. Function-backed setters do not build the value pipeline. Defaults are deduplicated
 by field before rendering because multiple targets can share one field.
 
+Map put setters skip the empty key only when the key's underlying type is string; resolved type facts carry this property for named string keys.
+
 The parser extracts every source field into `SourcePackage.StructFields`, including fields skipped with `opt:"-"`; resolved type facts and import
 references allow semantic validation and rendering of `enables` and `resets` targets. The parser also extracts `//optgen:doc` lines from raw comment
 groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. Semantic preparation applies the option prefix to directive

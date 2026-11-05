@@ -88,6 +88,8 @@ func sourceImports(
 	fields []model.OptField,
 	localImports map[string]model.ImportInfo,
 	needsTypeImports map[string]bool,
+	needsCheckImports map[string]bool,
+	needsErrorImports map[string]bool,
 ) []model.GeneratedImport {
 	imports := make(importSet)
 	importByName := indexImportsByName(localImports)
@@ -106,11 +108,13 @@ func sourceImports(
 			addExpressionImports(imports, importByName, field.Default)
 		}
 
-		for _, value := range field.Checks {
-			addExpressionImports(imports, importByName, value)
+		if needsCheckImports[field.FieldName] {
+			for _, value := range field.Checks {
+				addExpressionImports(imports, importByName, value)
+			}
 		}
 
-		if value := field.Metadata["err"]; value != "" {
+		if value := field.Metadata["err"]; needsErrorImports[field.FieldName] && value != "" {
 			addExpressionImports(imports, importByName, value)
 		}
 	}

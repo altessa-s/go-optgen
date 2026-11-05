@@ -349,6 +349,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	isNilable := IsNilableType(field.Type)
 	typeImports := ExtractImportsFromType(field.Type, imports)
 	mapKeyType, mapValueType, mapValueNilable := mapEntryFacts(mapType, types)
+	mapKeyString := mapType != nil && TypeToString(mapType.Key) == "string"
 
 	var (
 		facts, elemFacts       TypeFacts
@@ -357,6 +358,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	if types != nil {
 		if facts, resolved = types.TypeFacts(field.Type); resolved {
 			isInterface, isNilable = facts.Interface, facts.Nilable
+			mapKeyString = mapKeyString || facts.MapKeyString
 		}
 
 		if isSlice {
@@ -383,6 +385,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			IsSlice:         isSlice,
 			IsMap:           isMap,
 			MapKeyType:      mapKeyType,
+			MapKeyString:    mapKeyString,
 			MapValueType:    mapValueType,
 			MapValueNilable: mapValueNilable,
 			IsInterface:     isInterface,
@@ -666,7 +669,7 @@ func validateCloneType(fieldName string, fieldType ast.Expr, modifiers []string)
 			continue
 		}
 
-		if _, slice := fieldType.(*ast.ArrayType); slice {
+		if arr, slice := fieldType.(*ast.ArrayType); slice && arr.Len == nil {
 			continue
 		}
 

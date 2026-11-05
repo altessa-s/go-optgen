@@ -96,7 +96,11 @@ func TestExecuteDoesNotReuseFullFieldDocAcrossMultiOptionField(t *testing.T) {
 	t.Parallel()
 
 	tmpl := template.Must(template.New("doc").Parse(fieldtmpl.Common + `{{template "optionDoc" .}}`))
-	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
+	fields := []model.OptField{
+		{FieldName: "mapping", OptionName: "First", Metadata: map[string]string{"multiopt": "true"}},
+		{FieldName: "mapping", OptionName: "Second", Metadata: map[string]string{"multiopt": "true"}},
+	}
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, fields, nil, model.GenericInfo{})
 	base := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "mapping", OptionName: "Second", Doc: "WithFirst sets the first mapping.", Metadata: map[string]string{"multiopt": "true"}})
 	base.FuncPrefix = "With"
 	out, err := fieldtmpl.Execute(tmpl, &base)
@@ -112,11 +116,24 @@ func TestNewBaseDataKeepsOrdinaryMultiOptionDocumentation(t *testing.T) {
 	require.Contains(t, base.DocComment, "With multiple routes configured")
 }
 
-func TestNewBaseDataFiltersInvertOptionDoc(t *testing.T) {
+func TestNewBaseDataKeepsEnglishMultiOptionDocumentationStartingWithWithout(t *testing.T) {
 	t.Parallel()
 
 	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option"}, nil, nil, model.GenericInfo{})
-	base := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "second", OptionName: "Second", Doc: "WithoutFirst disables first.", Metadata: map[string]string{"multiopt": "true"}, Modifiers: []string{"invert"}})
+	base := fieldtmpl.NewBaseData(ctx, model.OptField{FieldName: "timeouts", OptionName: "ReadTimeout", Doc: "Without explicit timeouts, both fields use the default deadline.", Metadata: map[string]string{"multiopt": "true"}})
+	require.Contains(t, base.DocComment, "Without explicit timeouts")
+}
+
+func TestNewBaseDataFiltersInvertOptionDoc(t *testing.T) {
+	t.Parallel()
+
+	fields := []model.OptField{
+		{FieldName: "second", OptionName: "First", Metadata: map[string]string{"multiopt": "true"}, HasModifiers: true, Modifiers: []string{"invert"}},
+		{FieldName: "second", OptionName: "Second", Metadata: map[string]string{"multiopt": "true"}, HasModifiers: true, Modifiers: []string{"invert"}},
+	}
+	ctx := plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option", InvertFuncPrefix: "Without"}, fields, nil, model.GenericInfo{})
+	base := fieldtmpl.NewBaseData(ctx, fields[1])
+	base.Doc = "WithoutFirst disables first."
 	base.FuncPrefix = "Without"
 	require.NotContains(t, base.DocComment, "WithoutFirst")
 }

@@ -59,10 +59,6 @@ func WithEagerMap[K comparable](v map[string]int) Option[K] {
 // WithEnum adds a Enum entry.
 func WithEnum[K comparable](key K, value uint8) Option[K] {
 	return func(o *options[K]) {
-		var zeroKey K
-		if key == zeroKey {
-			return
-		}
 		if o.Enum == nil {
 			o.Enum = make(map[K]uint8)
 		}
@@ -74,10 +70,6 @@ func WithEnum[K comparable](key K, value uint8) Option[K] {
 // WithFuncs adds a Funcs entry.
 func WithFuncs[K comparable](key K, value func()) Option[K] {
 	return func(o *options[K]) {
-		var zeroKey K
-		if key == zeroKey {
-			return
-		}
 		if value == nil {
 			return
 		}
@@ -118,6 +110,7 @@ func WithMoreKeys[K comparable](
 		if len(v) == 0 {
 			return
 		}
+
 		if o.MoreKeys == nil {
 			o.MoreKeys = make(map[K]struct{})
 		}

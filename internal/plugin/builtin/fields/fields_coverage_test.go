@@ -54,6 +54,42 @@ func TestMapCollectionParametersDoNotShadowKeyTypes(t *testing.T) {
 	}
 }
 
+func TestMapPutSkipsOnlyEmptyStringKeys(t *testing.T) {
+	t.Parallel()
+
+	plugin := &fields.MapPutPlugin{}
+
+	stringField := model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[string]int", IsMap: true, MapKeyString: true,
+		MapKeyType: "string", MapValueType: "int", Metadata: map[string]string{"put": "true"}}
+	stringCode, err := plugin.Generate(newCtx(false), stringField, nil)
+	require.NoError(t, err)
+	require.Contains(t, stringCode.Code, "var zeroKey string")
+	require.Contains(t, stringCode.Code, "if key == zeroKey { return }")
+
+	namedStringField := stringField
+	namedStringField.Type = "map[key]int"
+	namedStringField.MapKeyType = "key"
+	namedStringField.MapKeyString = true
+	namedStringCode, err := plugin.Generate(newCtx(false), namedStringField, nil)
+	require.NoError(t, err)
+	require.Contains(t, namedStringCode.Code, "var zeroKey key")
+
+	for _, keyType := range []string{"int", "bool", "*int"} {
+		t.Run(keyType, func(t *testing.T) {
+			t.Parallel()
+
+			field := stringField
+			field.Type = "map[" + keyType + "]int"
+			field.MapKeyType = keyType
+			field.MapKeyString = false
+			generated, err := plugin.Generate(newCtx(false), field, nil)
+			require.NoError(t, err)
+			require.NotContains(t, generated.Code, "zeroKey")
+			require.NotContains(t, generated.Code, `== ""`)
+		})
+	}
+}
+
 func genericCtx() plugin.GenerationContext {
 	return plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option", OptionReturnsError: false}, nil, nil,
 		model.GenericInfo{TypeParams: []model.TypeParam{{Name: "T", Constraint: "any"}}})

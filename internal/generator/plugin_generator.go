@@ -41,6 +41,7 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	)
 
 	needsTypeImports := make(map[string]bool, len(in.Fields))
+	emittedOptions := make(map[string]bool, len(in.Fields))
 
 	addImport := func(imp model.GeneratedImport) {
 		if imp.Path == "" {
@@ -70,6 +71,7 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 			optionName: field.OptionName,
 			code:       result.Code,
 		})
+		emittedOptions[field.FieldName] = emittedOptions[field.FieldName] || strings.TrimSpace(result.Code) != ""
 		// Mandatory fields have no option but appear in the constructor signature.
 		if field.SetterTarget == nil {
 			needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
@@ -96,7 +98,15 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		}
 	}
 
-	requiredImports := sourceImports(fieldsForImports, in.Imports, needsTypeImports)
+	needsCheckImports := make(map[string]bool, len(in.Fields))
+
+	needsErrorImports := make(map[string]bool, len(in.Fields))
+	for _, field := range in.Fields {
+		needsCheckImports[field.FieldName] = emittedOptions[field.FieldName] || in.Validate
+		needsErrorImports[field.FieldName] = emittedOptions[field.FieldName] && in.OptionReturnsError && field.Metadata["parseip"] == "true"
+	}
+
+	requiredImports := sourceImports(fieldsForImports, in.Imports, needsTypeImports, needsCheckImports, needsErrorImports)
 	for _, imp := range requiredImports {
 		addImport(imp)
 	}

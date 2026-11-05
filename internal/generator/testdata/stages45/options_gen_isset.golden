@@ -31,9 +31,10 @@ func WithAppended[T any](v ...int) Option[T] {
 				deduped = append(deduped, item)
 			}
 		}
+		o.set |= 1 << optionsFieldAppended
 		o.appended = append(o.appended, deduped...)
 		o.appendOn = true
-		o.set |= 1 << optionsFieldAppended
+
 	}
 }
 
@@ -41,11 +42,12 @@ func WithAppended[T any](v ...int) Option[T] {
 func WithEnabled[T any]() Option[T] {
 	return func(o *options[T]) {
 		value := true
+		o.set |= 1 << optionsFieldEnabled
 		o.enabled = value
 		o.pointer = *new(*int)
 		o.callback = *new(func())
 		o.payload = *new(T)
-		o.set |= 1 << optionsFieldEnabled
+
 	}
 }
 
@@ -59,9 +61,9 @@ func WithEntries[T any](key string, value int) Option[T] {
 		if o.entries == nil {
 			o.entries = make(map[string]int)
 		}
+		o.set |= 1 << optionsFieldEntries
 		o.entries[key] = value
 		o.entriesOn = true
-		o.set |= 1 << optionsFieldEntries
 
 	}
 }
@@ -69,9 +71,10 @@ func WithEntries[T any](key string, value int) Option[T] {
 // WithFilter sets the filter option.
 func WithFilter[T any](v func(string) bool) Option[T] {
 	return func(o *options[T]) {
+		o.set |= 1 << optionsFieldFilter
 		o.filter = v
 		o.filterOn = true
-		o.set |= 1 << optionsFieldFilter
+
 	}
 }
 
@@ -80,12 +83,13 @@ func WithKeys[T any](
 	v ...string,
 ) Option[T] {
 	return func(o *options[T]) {
+		o.set |= 1 << optionsFieldKeys
 		o.keys = make(map[string]struct{}, len(v))
 		for _, key := range v {
 			o.keys[key] = struct{}{}
 		}
 		o.keysOn = true
-		o.set |= 1 << optionsFieldKeys
+
 	}
 }
 
@@ -127,9 +131,10 @@ func WithPlain[T any](v int) Option[T] {
 // WithRetry sets the retry option.
 func WithRetry[T any](arg0 time.Duration) Option[T] {
 	return func(o *options[T]) {
+		o.set |= 1 << optionsFieldRetry
 		o.retry = makeRetry(arg0)
 		o.retryOn = true
-		o.set |= 1 << optionsFieldRetry
+
 	}
 }
 
@@ -154,9 +159,10 @@ func WithSlice[T any](v ...string) Option[T] {
 				deduped = append(deduped, item)
 			}
 		}
+		o.set |= 1 << optionsFieldSlice
 		o.slice = deduped
 		o.sliceOn = true
-		o.set |= 1 << optionsFieldSlice
+
 	}
 }
 
@@ -166,9 +172,10 @@ func WithTimeout[T any](v time.Duration) Option[T] {
 		if v < (1 * time.Second) {
 			panic(fmt.Errorf("timeout is below minimum (1 * time.Second)"))
 		}
+		o.set |= 1 << optionsFieldTimeout
 		o.timeout = v
 		o.durationOn = true
-		o.set |= 1 << optionsFieldTimeout
+
 	}
 }
 
