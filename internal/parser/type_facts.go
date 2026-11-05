@@ -13,10 +13,13 @@ import (
 
 // TypeFacts are the properties of a resolved field type that plugins rely on.
 type TypeFacts struct {
-	Interface  bool // The type is an interface
-	Nilable    bool // The type can be nil: pointer, slice, map, channel, function or interface
-	Numeric    bool // The underlying type is an integer or floating-point type
-	Comparable bool // Values of the type are comparable
+	Interface       bool // The type is an interface
+	Nilable         bool // The type can be nil: pointer, slice, map, channel, function or interface
+	Numeric         bool // The underlying type is an integer or floating-point type
+	Comparable      bool // Values of the type are comparable
+	MapKeyType      string
+	MapValueType    string
+	MapValueNilable bool
 }
 
 // TypeResolver supplies facts about type expressions of the parsed files. It

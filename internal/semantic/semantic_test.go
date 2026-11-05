@@ -205,6 +205,18 @@ func TestPrepareDefaultModifiers(t *testing.T) {
 	}
 }
 
+func TestPrepareMapPutDoesNotApplyMapDefault(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{
+		{FieldName: "put", OptionName: "Put", Type: "map[string]uint8", IsMap: true, Metadata: map[string]string{"put": "true"}},
+		{FieldName: "set", OptionName: "Set", Type: "map[string]struct{}", IsMap: true, Metadata: map[string]string{"set": "true"}},
+	})
+	require.NoError(t, err)
+	require.Empty(t, prepared[0].Default)
+	require.Equal(t, "make(map[string]struct{})", prepared[1].Default)
+}
+
 func builtinRegistry(tb testing.TB) *plugin.Registry {
 	tb.Helper()
 

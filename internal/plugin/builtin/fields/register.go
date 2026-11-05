@@ -12,6 +12,8 @@ func Register(r *plugin.Registry) error {
 		&DefaultAppenderPlugin{},
 		&BoolFlagPlugin{},
 		&ManualPlugin{},
+		&MapSetPlugin{},
+		&MapPutPlugin{},
 		&NetIPParsePlugin{},
 		&SetterFuncPlugin{},
 		&DefaultSetterPlugin{},

@@ -88,9 +88,9 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 			return nil, err
 		}
 
-		if f.Default == "" {
+		if f.Default == "" && f.Metadata["put"] != "true" {
 			f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
-		} else {
+		} else if f.Default != "" {
 			f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
 		}
 

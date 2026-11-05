@@ -11,7 +11,7 @@ Package `defaults` provides default expressions during semantic preparation.
 | API | Purpose |
 |-----|---------|
 | `LoggerDefaultPlugin` | slog.New(slog.DiscardHandler) |
-| `MapDefaultPlugin` | An initialized map |
+| `MapDefaultPlugin` | An initialized map; `put` fields without an explicit `default=` stay nil and create the map on first use |
 | `DurationDefaultPlugin` | Rewrites `time.Duration` tag defaults such as `30s` into `30 * time.Second` (`DefaultNormalizer`) |
 | `ConfiguredDefaultPlugin` | Defaults configured per type (`type-defaults` in `.optgen.yaml`); registered by the CLI when configured |
 

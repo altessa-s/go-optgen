@@ -342,6 +342,83 @@ type options struct {
 	require.Equal(t, map[string]string{"append": "true", "err": "custom"}, field.Metadata)
 }
 
+func TestFindOptFields_MapFacts(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `
+package sample
+
+type options struct {
+    value map[string]Alias ~opt:"Value" optgen:"put"~
+}
+`})
+
+	result, err := parser.FindOptFields(pkg, "options", false, resolvedMapFacts{})
+	require.NoError(t, err)
+
+	field := result.Fields[0]
+
+	require.Equal(t, "map[string]Alias", field.Type)
+	require.True(t, field.IsMap)
+	require.Equal(t, "string", field.MapKeyType)
+	require.Equal(t, "Alias", field.MapValueType)
+	require.True(t, field.MapValueNilable)
+	require.True(t, field.TypeResolved)
+}
+
+func TestFindOptFields_MapValueNilableSyntaxFallback(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `
+package sample
+
+type options struct {
+	callback map[string]func() ~optgen:"put"~
+	value    map[string]any ~optgen:"put"~
+	count    map[string]uint8 ~optgen:"put"~
+}
+`})
+
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+	require.True(t, result.Fields[0].MapValueNilable)
+	require.False(t, result.Fields[1].MapValueNilable)
+	require.True(t, result.Fields[2].MapValueNilable)
+}
+
+type resolvedMapFacts struct{}
+
+func (resolvedMapFacts) TypeFacts(ast.Expr) (parser.TypeFacts, bool) {
+	return parser.TypeFacts{Nilable: true, MapKeyType: "string", MapValueType: "Alias", MapValueNilable: true}, true
+}
+
+func (resolvedMapFacts) ResolveSetterTarget(ast.Expr, token.Pos, string, bool, map[string]model.ImportInfo) (model.SetterTarget, error) {
+	return model.SetterTarget{}, nil
+}
+
+func TestFindOptFields_CollectionTagValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		typ    string
+		tag    string
+		wanted string
+	}{
+		{name: "set non map", typ: "[]string", tag: `optgen:"set"`, wanted: "optgen set requires map[K]struct{}"},
+		{name: "set map with value", typ: "map[string]int", tag: `optgen:"set"`, wanted: "optgen set requires map[K]struct{}"},
+		{name: "put non map", typ: "string", tag: `optgen:"put"`, wanted: "optgen put requires a map field"},
+		{name: "clone scalar", typ: "int", tag: `optval:"clone"`, wanted: "optval clone requires a slice or map field"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pkg := parsePackage(t, map[string]string{"options.go": "package sample\ntype options struct { value " + tc.typ + " `" + tc.tag + "` }"})
+			_, err := parser.FindOptFields(pkg, "options", false, nil)
+			require.ErrorContains(t, err, tc.wanted)
+		})
+	}
+}
+
 func TestFindOptFields_LineCommentDoc(t *testing.T) {
 	t.Parallel()
 

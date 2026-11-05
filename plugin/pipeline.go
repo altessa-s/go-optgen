@@ -43,7 +43,7 @@ func (r *Executor) BuildPipeline(ctx GenerationContext, field model.OptField, in
 		return PipelineResult{Code: strings.Join(lines, "\n"), ValueVar: value, EarlyReturn: final}
 	}
 
-	for _, phase := range []Phase{PhaseGuard, PhaseTransform, PhasePostProcess, PhaseCheck} {
+	for _, phase := range []Phase{PhaseGuard, PhaseTransform, PhasePostProcess, PhaseCheck, PhaseClone} {
 		if phase == PhaseTransform {
 			result := r.transformValue(ctx, field, value)
 			lines = append(lines, result.Code...)

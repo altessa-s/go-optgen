@@ -12,7 +12,7 @@ Package `fieldtmpl` provides templates and option data shared by the built-in [f
 |------------|--------------------------------------------------------------------|
 | `Must`     | Parses a field template with the shared `optionReturn` definition  |
 | `Execute`  | Renders one option function                                        |
-| `BaseData` | Field and option type identity, ordinary and complete option docs |
+| `BaseData` | Field and option type identity, pre-closure snapshot code, ordinary and complete option docs |
 | `Data`     | `BaseData` plus pipeline code, final value, and termination flag   |
 | `NewData`  | Runs the value pipeline for a field and builds `Data`              |
 
@@ -22,7 +22,8 @@ Package `fieldtmpl` provides templates and option data shared by the built-in [f
 var setter = fieldtmpl.Must("setter", `...{{template "optionReturn" .}}`)
 
 func (p *Plugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
-	return fieldtmpl.Execute(setter, fieldtmpl.NewData(ctx, field, values, "v"))
+	data := fieldtmpl.NewData(ctx, field, values, "v")
+	return fieldtmpl.Execute(setter, &data)
 }
 ```
 

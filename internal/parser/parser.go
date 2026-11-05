@@ -275,6 +275,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	// Only a slice gets the slice setters; a fixed-size array is a scalar.
 	arrType, isSlice := field.Type.(*ast.ArrayType)
 	isSlice = isSlice && arrType.Len == nil
+	mapType, isMap := field.Type.(*ast.MapType)
 
 	elemType := ""
 	if isSlice {
@@ -293,6 +294,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	isInterface := IsInterfaceType(field.Type)
 	isNilable := IsNilableType(field.Type)
 	typeImports := ExtractImportsFromType(field.Type, imports)
+	mapKeyType, mapValueType, mapValueNilable := mapEntryFacts(mapType, types)
 
 	var (
 		facts, elemFacts       TypeFacts
@@ -318,21 +320,25 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 		}
 
 		base := model.OptField{
-			FieldName:    fieldName,
-			OptionName:   optName,
-			Type:         typeStr,
-			TypeImports:  slices.Clone(typeImports),
-			Default:      parsed.Default,
-			Doc:          doc,
-			IsSlice:      isSlice,
-			IsInterface:  isInterface,
-			IsNilable:    isNilable,
-			ElemType:     elemType,
-			Modifiers:    slices.Clone(modifiers),
-			Metadata:     maps.Clone(parsed.Metadata),
-			Checks:       maps.Clone(parsed.Checks),
-			BareChecks:   maps.Clone(parsed.BareChecks),
-			HasModifiers: len(modifiers) > 0,
+			FieldName:       fieldName,
+			OptionName:      optName,
+			Type:            typeStr,
+			TypeImports:     slices.Clone(typeImports),
+			Default:         parsed.Default,
+			Doc:             doc,
+			IsSlice:         isSlice,
+			IsMap:           isMap,
+			MapKeyType:      mapKeyType,
+			MapValueType:    mapValueType,
+			MapValueNilable: mapValueNilable,
+			IsInterface:     isInterface,
+			IsNilable:       isNilable,
+			ElemType:        elemType,
+			Modifiers:       slices.Clone(modifiers),
+			Metadata:        maps.Clone(parsed.Metadata),
+			Checks:          maps.Clone(parsed.Checks),
+			BareChecks:      maps.Clone(parsed.BareChecks),
+			HasModifiers:    len(modifiers) > 0,
 
 			TypeResolved:   resolved,
 			IsNumeric:      resolved && facts.Numeric,
@@ -371,6 +377,23 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	}
 
 	return out, nil
+}
+
+func mapEntryFacts(mapType *ast.MapType, types TypeResolver) (keyType, valueType string, valueNilable bool) {
+	if mapType == nil {
+		return "", "", false
+	}
+
+	keyType, valueType = TypeToString(mapType.Key), TypeToString(mapType.Value)
+	valueNilable = IsNilableType(mapType.Value)
+
+	if types != nil {
+		if facts, resolved := types.TypeFacts(mapType); resolved {
+			valueNilable = facts.MapValueNilable
+		}
+	}
+
+	return keyType, valueType, valueNilable
 }
 
 func extractOptionDocs(field *ast.Field) (map[string]string, error) {
@@ -419,6 +442,44 @@ func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed par
 		return fmt.Errorf("field %s: %w", fieldName, parsed.TagError)
 	}
 
+	_, isSet := parsed.Metadata["set"]
+	_, isPut := parsed.Metadata["put"]
+
+	if isSet && isPut {
+		return fmt.Errorf("field %s: optgen set and put cannot be combined", fieldName)
+	}
+
+	if isSet {
+		mapType, ok := field.Type.(*ast.MapType)
+
+		value, emptyStruct := mapTypeValue(mapType)
+		if !ok || !emptyStruct || TypeToString(value) != "struct{}" {
+			return fmt.Errorf("field %s: optgen set requires map[K]struct{}", fieldName)
+		}
+	}
+
+	if isPut {
+		if _, ok := field.Type.(*ast.MapType); !ok {
+			return fmt.Errorf("field %s: optgen put requires a map field", fieldName)
+		}
+	}
+
+	for _, modifier := range parsed.Modifiers {
+		if modifier != "clone" && modifier != "clone=eager" {
+			continue
+		}
+
+		if _, slice := field.Type.(*ast.ArrayType); slice {
+			continue
+		}
+
+		if _, mapField := field.Type.(*ast.MapType); mapField {
+			continue
+		}
+
+		return fmt.Errorf("field %s: optval %s requires a slice or map field", fieldName, modifier)
+	}
+
 	if !ctx.hasOptfn {
 		return nil
 	}
@@ -438,6 +499,16 @@ func validateSetterTags(field *ast.Field, ctx fieldProcessingContext, parsed par
 	}
 
 	return nil
+}
+
+func mapTypeValue(t *ast.MapType) (ast.Expr, bool) {
+	if t == nil {
+		return nil, false
+	}
+
+	value, ok := t.Value.(*ast.StructType)
+
+	return t.Value, ok && len(value.Fields.List) == 0
 }
 
 func resolveSetterFields(

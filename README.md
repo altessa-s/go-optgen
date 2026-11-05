@@ -4,16 +4,17 @@
 go install github.com/altessa-s/go-optgen/cmd/optgen@latest
 ```
 
-`optgen` is a code generator for the functional option pattern. It scans Go structs for fields annotated with `opt`/`optgen`/`optval`/`optcheck`/`optfn` tags
-and generates type-safe `WithXxx` option functions, default constructors, and validation code with an extensible plugin system.
+`optgen` is a code generator for the functional option pattern. It scans Go structs for fields annotated with
+`opt`/`optgen`/`optval`/`optcheck`/`optfn` tags and generates type-safe `WithXxx` option functions, default constructors, and validation code with an
+extensible plugin system.
 
 ## Tag format
 
 | Tag        | Purpose                                                                          |
 |------------|----------------------------------------------------------------------------------|
 | `opt`      | Option name for the `WithXxx` function; use `-` to skip generation. Omit it to derive the name from the field (see [Option naming](#option-naming)) |
-| `optgen`   | Generator directives: `default=...`, `append`, `notnil`, `manual`, `parseip`, `err=...` |
-| `optval`   | Value modifiers: `trimspaces`, `lower`, `upper`, `trimprefix=...`, `trimsuffix=...`, `dedup`, `nonempty`, `positive`; `invert` / `param` for bool fields. `trimspaces` applies to string fields by default; `notrim` disables it |
+| `optgen`   | Generator directives: `default=...`, `append`, `set`, `put`, `notnil`, `manual`, `parseip`, `err=...` |
+| `optval`   | Value modifiers: `trimspaces`, `lower`, `upper`, `trimprefix=...`, `trimsuffix=...`, `dedup`, `clone[=eager]`, `nonempty`, `positive`; `invert` / `param` for bool fields. `trimspaces` applies to string fields by default; `notrim` disables it |
 | `optcheck` | Validation rules: `required`, `nonzero`, `minlen=N`, `maxlen=N`, `oneof=[a,b,c]`|
 | `optfn`    | Setter targets as `OptionName=Function` or `OptionName=.Method`; target signatures supply parameters |
 
@@ -53,8 +54,9 @@ The final name includes `--option-prefix` and the function prefix configured by 
 
 ## Option naming
 
-For fields selected by `--all-fields`, `all-fields: true`, or an `optgen`/`optval`/`optcheck`/`optfn` tag, an omitted `opt` tag derives the option name from the
-field name, with every word that is a known initialism upper-cased — Go style requires an initialism to keep a consistent case throughout an identifier:
+For fields selected by `--all-fields`, `all-fields: true`, or an `optgen`/`optval`/`optcheck`/`optfn` tag, an omitted `opt` tag derives the option name
+from the field name, with every word that is a known initialism upper-cased — Go style requires an initialism to keep a consistent case throughout an
+identifier:
 
 | Field           | Generated                |
 |-----------------|--------------------------|

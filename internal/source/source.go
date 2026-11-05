@@ -169,17 +169,31 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 
 	facts := optparser.TypeFacts{Interface: types.IsInterface(t), Comparable: types.Comparable(t)}
 	switch u := t.Underlying().(type) {
+	case *types.Map:
+		facts.Nilable = true
+		facts.MapKeyType = types.TypeString(u.Key(), nil)
+		facts.MapValueType = types.TypeString(u.Elem(), nil)
+		facts.MapValueNilable = typeNilable(u.Elem())
 	case *types.Basic:
 		if u.Kind() == types.Invalid {
 			return optparser.TypeFacts{}, false
 		}
 
 		facts.Numeric = u.Info()&types.IsNumeric != 0 && u.Info()&types.IsComplex == 0
-	case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Signature, *types.Interface:
+	case *types.Pointer, *types.Slice, *types.Chan, *types.Signature, *types.Interface:
 		facts.Nilable = true
 	}
 
 	return facts, true
+}
+
+func typeNilable(t types.Type) bool {
+	switch t.Underlying().(type) {
+	case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Signature, *types.Interface:
+		return true
+	default:
+		return false
+	}
 }
 
 const maxSetterResults = 2

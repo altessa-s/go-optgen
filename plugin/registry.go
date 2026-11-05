@@ -558,6 +558,7 @@ func MatchesType(typeStr string, patterns []string) bool {
 	for _, t := range patterns {
 		switch t = strings.TrimSpace(t); {
 		case t == "[]" && strings.HasPrefix(typeStr, "[]"),
+			t == "map[" && strings.HasPrefix(typeStr, "map["),
 			t == "*" && strings.HasPrefix(typeStr, "*"),
 			t == "interface" && (typeStr == "interface{}" || typeStr == "any"),
 			t == typeStr:

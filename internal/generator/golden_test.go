@@ -11,8 +11,10 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,6 +36,82 @@ func TestGenerator_Golden_Default(t *testing.T) {
 func TestGenerator_Golden_OptionError(t *testing.T) {
 	t.Parallel()
 	runGeneratorGolden(t, true, "testdata/basic", "basic", "options_gen_error.golden")
+}
+
+func TestGenerator_Golden_Collections(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		settings model.RenderSettings
+		golden   string
+	}{
+		{name: "default", golden: "options_gen.golden"},
+		{name: "option error", settings: model.RenderSettings{OptionReturnsError: true}, golden: "options_gen_error.golden"},
+		{name: "prefix and isset slice parameters", settings: model.RenderSettings{FuncPrefix: "Set", WithIsSet: true, SliceSetter: model.SliceSetterSlice}, golden: "options_gen_prefix.golden"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := runGeneratorGoldenSettings(t, "testdata/collections", "collections", tc.golden, tc.settings)
+			typeCheckGenerated(t, "testdata/collections", got)
+		})
+	}
+}
+
+func TestGenerator_CollectionsCloneTiming(t *testing.T) {
+	t.Parallel()
+
+	generated := runGeneratorGoldenSettings(t, "testdata/collections", "collections", "options_gen.golden", model.RenderSettings{})
+	dir := t.TempDir()
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	fixture := filepath.Join(filepath.Dir(thisFile), "testdata/collections")
+
+	input, err := os.ReadFile(filepath.Join(fixture, "input.go"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module collectiontest\n\ngo 1.26\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "input.go"), input, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options_gen.go"), generated, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "clone_test.go"), []byte(`package collections
+
+import "testing"
+
+func TestCloneTiming(t *testing.T) {
+	input := []string{"before"}
+	clone := WithReplace[string](input...)
+	eager := WithEager[string](input...)
+	input[0] = "after"
+
+	var cloneOptions options[string]
+	clone(&cloneOptions)
+	if cloneOptions.Replace[0] != "after" {
+		t.Fatalf("clone saw %q, want mutation made before application", cloneOptions.Replace[0])
+	}
+
+	var eagerOptions options[string]
+	eager(&eagerOptions)
+	if eagerOptions.Eager[0] != "before" {
+		t.Fatalf("clone=eager saw %q, want creation-time snapshot", eagerOptions.Eager[0])
+	}
+
+	var values options[string]
+	WithStringValue[string](" ", 0)(&values)
+	if value, ok := values.StringValue[" "]; !ok || value != 0 {
+		t.Fatalf("put trimmed or skipped a valid zero value: %v", values.StringValue)
+	}
+	WithStringValue[string]("", 1)(&values)
+	if len(values.StringValue) != 1 {
+		t.Fatalf("put accepted a zero key: %v", values.StringValue)
+	}
+}
+`), 0o644))
+
+	cmd := exec.Command("go", "test", "-count=1", "./...")
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "compiled clone behavior: %s", output)
 }
 
 // The typed fixture covers field types that must be rendered verbatim (fixed
@@ -72,6 +150,16 @@ func typeCheckGenerated(tb testing.TB, relDir string, generated []byte) {
 	fset := token.NewFileSet()
 	input, err := parser.ParseFile(fset, filepath.Join(dir, "input.go"), nil, 0)
 	require.NoError(tb, err, "parse input")
+
+	if strings.Contains(string(generated), "type optionsFieldSet uint64") {
+		inputBytes, readErr := os.ReadFile(filepath.Join(dir, "input.go"))
+		require.NoError(tb, readErr, "read fixture input")
+
+		inputSource := strings.Replace(string(inputBytes), "type optionsFieldSet uint64\n\n", "", 1)
+		input, err = parser.ParseFile(fset, filepath.Join(dir, "input.go"), inputSource, 0)
+		require.NoError(tb, err, "parse input without generated field set type")
+	}
+
 	output, err := parser.ParseFile(fset, "options_gen.go", generated, 0)
 	require.NoError(tb, err, "parse generated output")
 
@@ -130,6 +218,11 @@ func requireParamsNotReassigned(tb testing.TB, generated []byte) {
 
 func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName, goldenName string) []byte {
 	tb.Helper()
+	return runGeneratorGoldenSettings(tb, relDir, pkgName, goldenName, model.RenderSettings{OptionReturnsError: optionReturnsError})
+}
+
+func runGeneratorGoldenSettings(tb testing.TB, relDir, pkgName, goldenName string, settings model.RenderSettings) []byte {
+	tb.Helper()
 
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(tb, ok, "runtime.Caller failed")
@@ -150,24 +243,25 @@ func runGeneratorGolden(tb testing.TB, optionReturnsError bool, relDir, pkgName,
 	require.NoError(tb, err, "FindNormalizationMethod")
 
 	r := testRegistry()
-	result.Fields, err = semantic.New(r).Prepare(result.Fields)
+
+	settings.TypeName = "options"
+
+	isSetField := result.IsSetField
+
+	prepared, err := semantic.New(r).PrepareInput(model.GenerateInput{RenderSettings: settings, Fields: result.Fields, IsSetField: isSetField})
 	require.NoError(tb, err)
 
 	g := generator.New(r, plugin.NewPipeline(r))
 	got, err := g.Generate(model.GenerateInput{
-		TypeName:            "options",
-		OptionType:          "Option",
-		GenerateOptionType:  true,
-		GenerateDefaultFunc: true,
-		GenerateNewFunc:     true,
-		OptionReturnsError:  optionReturnsError,
-		DefaultFuncName:     "defaultOptions",
-		NewFuncName:         "newOptions",
+		TypeName: "options", OptionType: "Option", GenerateOptionType: true, GenerateDefaultFunc: true, GenerateNewFunc: true,
+		OptionReturnsError: settings.OptionReturnsError, FuncPrefix: settings.FuncPrefix, WithIsSet: settings.WithIsSet,
+		SliceSetter: settings.SliceSetter, DefaultFuncName: "defaultOptions", NewFuncName: "newOptions",
 		PackageName:         pkgName,
-		Fields:              result.Fields,
+		Fields:              prepared.Fields,
 		Imports:             result.Imports,
 		NormalizationMethod: normalizationMethod,
 		GenericInfo:         result.GenericInfo,
+		IsSetField:          isSetField,
 	})
 	require.NoError(tb, err, "Generate")
 	require.NotContains(tb, string(got), `"github.com/altessa-s/`, "generated code must not import altessa-s modules")

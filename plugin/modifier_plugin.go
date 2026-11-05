@@ -26,6 +26,9 @@ const (
 	// PhaseCheck validates the final value before assignment.
 	// Example: required, minlen, maxlen - validation checks.
 	PhaseCheck Phase = 40
+
+	// PhaseClone copies a final collection after all other modifiers.
+	PhaseClone Phase = 50
 )
 
 // String returns the phase name for display purposes.
@@ -39,6 +42,8 @@ func (p Phase) String() string {
 		return "postprocess"
 	case PhaseCheck:
 		return "check"
+	case PhaseClone:
+		return "clone"
 	default:
 		return "unknown"
 	}
@@ -68,6 +73,7 @@ type ModifierResult struct {
 //  2. PhaseTransform: Value modifications (e.g., lower, upper, trimspaces)
 //  3. PhasePostProcess: Cleanup operations (e.g., dedup, nonempty)
 //  4. PhaseCheck: Validation, including the code of optcheck plugins
+//  5. PhaseClone: Collection copies after all other modifiers
 type ModifierPlugin interface {
 	PluginMeta
 

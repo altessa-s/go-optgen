@@ -49,6 +49,7 @@ func (p *DefaultSetterPlugin) Meta() plugin.Meta {
 
 var setterTemplate = fieldtmpl.Must("setter", `{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionType}}{{.TypeParamsNames}} {
+	{{- .PreClosureCode}}
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}{{if .SkipEmpty}}		if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
 {{end}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}

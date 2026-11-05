@@ -10,6 +10,7 @@
 //	var setter = fieldtmpl.Must("setter", `...{{template "optionReturn" .}}`)
 //
 //	func (p *Plugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
-//		return fieldtmpl.Execute(setter, new(fieldtmpl.NewData(ctx, field, values, "v")))
+//		data := fieldtmpl.NewData(ctx, field, values, "v")
+//		return fieldtmpl.Execute(setter, &data)
 //	}
 package fieldtmpl

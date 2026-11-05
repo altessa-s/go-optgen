@@ -101,6 +101,7 @@ type BaseData struct {
 	FuncPrefix         string // Option function prefix, "With" by default
 	KeepEmptyStrings   bool   // Assign empty strings instead of skipping them
 	SliceParam         bool   // Slice options take a slice instead of variadic elements
+	PreClosureCode     string // Code that snapshots option inputs before returning the closure
 	MarkSet            string // Statement recording the applied option, or empty
 	DocComment         string // Field documentation as comment lines following the summary, or empty
 	FullDocComment     string // Complete option documentation, or empty for the generated summary
@@ -173,7 +174,30 @@ func NewData(ctx plugin.GenerationContext, field model.OptField, values plugin.P
 		code = "\t\t" + strings.ReplaceAll(result.Code, "\n", "\n\t\t") + "\n"
 	}
 
-	return Data{BaseData: NewBaseData(ctx, field), PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
+	base := NewBaseData(ctx, field)
+	base.PreClosureCode = preClosureCode(ctx, field, inputVar)
+
+	return Data{BaseData: base, PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
+}
+
+func preClosureCode(ctx plugin.GenerationContext, field model.OptField, inputVar string) string {
+	for _, modifier := range field.Modifiers {
+		if modifier != "clone=eager" {
+			continue
+		}
+
+		if field.IsSlice {
+			ctx.AddImport("slices")
+			return "\t" + inputVar + " = slices.Clone(" + inputVar + ")\n"
+		}
+
+		if field.IsMap {
+			ctx.AddImport("maps")
+			return "\t" + inputVar + " = maps.Clone(" + inputVar + ")\n"
+		}
+	}
+
+	return ""
 }
 
 // markSet returns the statement recording that the option of field was
