@@ -15,6 +15,20 @@ import (
 	"github.com/altessa-s/go-optgen/plugin"
 )
 
+func TestParameterIdentifiersIncludesGeneratedBodyNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := plugin.NewGenerationContext("sample", model.RenderSettings{TypeName: "options", WithIsSet: true}, nil, nil,
+		model.GenericInfo{TypeParams: []model.TypeParam{{Name: "T", Constraint: "any"}}})
+	ctx.StructFields = []model.StructField{{Name: "other", Type: "pkg.Policy"}}
+	data := fieldtmpl.NewBaseData(ctx, model.OptField{OptionName: "Retry", Metadata: map[string]string{"enables": "active", "resets": "other"}})
+
+	used := fieldtmpl.ParameterIdentifiers(ctx, model.OptField{OptionName: "Retry"}, data.PostAssignment)
+	for _, name := range []string{"options", "T", "error", "len", "make", "nil", "new", "true", "optionsFieldRetry", "active", "pkg", "Policy"} {
+		require.True(t, used[name], "%s must be reserved", name)
+	}
+}
+
 // --- Option templates ---
 
 func TestMustRendersOptionReturn(t *testing.T) {

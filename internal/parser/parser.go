@@ -598,7 +598,7 @@ func validateCollectionSetterTags(field *ast.Field, parsed parsedFieldTags, isSe
 		return err
 	}
 
-	if parsed.Metadata["parseip"] == tagValueTrue && slices.Contains(parsed.Modifiers, "clone=eager") {
+	if parsed.Metadata["parseip"] == tagValueTrue && hasModifierFold(parsed.Modifiers, "clone=eager") {
 		return fmt.Errorf("field %s: optgen parseip cannot be combined with optval clone=eager", fieldName)
 	}
 
@@ -655,7 +655,7 @@ func validateCollectionOptions(fieldName string, parsed parsedFieldTags, isSet, 
 
 func validateCloneMode(fieldName string, modifiers []string) error {
 	for _, modifier := range modifiers {
-		if key, value, ok := strings.Cut(modifier, "="); ok && key == "clone" && value != "eager" {
+		if key, value, ok := strings.Cut(modifier, "="); ok && strings.EqualFold(key, "clone") && !strings.EqualFold(value, "eager") {
 			return fmt.Errorf("field %s: unsupported clone mode %q", fieldName, value)
 		}
 	}
@@ -665,7 +665,7 @@ func validateCloneMode(fieldName string, modifiers []string) error {
 
 func validateCloneType(fieldName string, fieldType ast.Expr, modifiers []string) error {
 	for _, modifier := range modifiers {
-		if modifier != "clone" && modifier != "clone=eager" {
+		if !strings.EqualFold(modifier, "clone") && !strings.EqualFold(modifier, "clone=eager") {
 			continue
 		}
 
@@ -681,6 +681,16 @@ func validateCloneType(fieldName string, fieldType ast.Expr, modifiers []string)
 	}
 
 	return nil
+}
+
+func hasModifierFold(modifiers []string, want string) bool {
+	for _, modifier := range modifiers {
+		if strings.EqualFold(modifier, want) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validateOptfnTags(fieldName string, ctx fieldProcessingContext, parsed parsedFieldTags) error {

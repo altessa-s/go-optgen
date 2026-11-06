@@ -108,6 +108,38 @@ func TestGeneratorOptfnParametersDoNotShadowUnaliasedImportsOrFunctions(t *testi
 	require.NoError(t, err, "generated setters must type-check with unaliased import and function-name collisions")
 }
 
+func TestGeneratorOptfnParametersAvoidGeneratedBodyIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	r := testRegistry()
+	field := model.OptField{FieldName: "retry", OptionName: "Retry", Type: "RetryConfig", Metadata: map[string]string{
+		"enables": "active", "resets": "other",
+	}, SetterTarget: &model.SetterTarget{Expression: "configureRetry", ReturnsError: false, Parameters: []model.FuncParameter{
+		{Name: "options", Type: "string"}, {Name: "error", Type: "string"}, {Name: "new", Type: "string"},
+		{Name: "make", Type: "string"}, {Name: "len", Type: "string"},
+	}}}
+	prepared, err := semantic.New(r).Prepare([]model.OptField{field})
+	require.NoError(t, err)
+	generated, err := generator.New(r, plugin.NewPipeline(r)).Generate(model.GenerateInput{
+		TypeName: "options", OptionType: "Option", OptionReturnsError: true, PackageName: "sample", Fields: prepared,
+		StructFields: []model.StructField{{Name: "active", Type: "bool"}, {Name: "other", Type: "int"}},
+	})
+	require.NoError(t, err)
+
+	fset := token.NewFileSet()
+	input, err := parser.ParseFile(fset, "input.go", "package sample\ntype RetryConfig int\ntype options struct { retry RetryConfig; active bool; other int }\ntype Option func(*options) error\nfunc configureRetry(options, error, new, make, len string) RetryConfig { return 0 }", 0)
+	require.NoError(t, err)
+	output, err := parser.ParseFile(fset, "options_gen.go", generated, 0)
+	require.NoError(t, err)
+	_, err = (&types.Config{Importer: importer.Default()}).Check("sample", fset, []*ast.File{input, output}, nil)
+	require.NoError(t, err, "generated setters must not shadow identifiers used in their body")
+	require.Contains(t, string(generated), "optionsArg string")
+	require.Contains(t, string(generated), "errorArg string")
+	require.Contains(t, string(generated), "newArg string")
+	require.Contains(t, string(generated), "makeArg string")
+	require.Contains(t, string(generated), "lenArg string")
+}
+
 func TestGenerator_OptionDocUsesPreparedOptionPrefix(t *testing.T) {
 	t.Parallel()
 

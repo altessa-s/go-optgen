@@ -6,7 +6,7 @@ package postprocess
 
 import (
 	"cmp"
-	"slices"
+	"strings"
 
 	"github.com/altessa-s/go-optgen/model"
 	"github.com/altessa-s/go-optgen/plugin"
@@ -63,5 +63,11 @@ func (m *CloneModifier) Generate(ctx plugin.GenerationContext, field model.OptFi
 }
 
 func hasModifier(field model.OptField, want string) bool {
-	return slices.Contains(field.Modifiers, want)
+	for _, modifier := range field.Modifiers {
+		if strings.EqualFold(modifier, want) {
+			return true
+		}
+	}
+
+	return false
 }

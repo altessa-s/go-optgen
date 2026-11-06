@@ -365,3 +365,22 @@ func TestPrepareResolvesMandatoryFromMetadata(t *testing.T) {
 	require.True(t, prepared[0].Mandatory)
 	require.False(t, prepared[1].Mandatory)
 }
+
+func TestPrepareAllowsDuplicateOptionNameWhenOneFieldIsMandatory(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{
+		{FieldName: "required", OptionName: "Shared", Type: "int", Metadata: map[string]string{"mandatory": "true"}},
+		{FieldName: "optional", OptionName: "Shared", Type: "int"},
+	})
+	require.NoError(t, err)
+	require.True(t, prepared[0].Mandatory)
+}
+
+func TestPrepareDoesNotPrefixOrdinaryFieldDocumentation(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t), semantic.WithPrefix("Server")).Prepare([]model.OptField{{
+		FieldName: "timeout", OptionName: "Timeout", Type: "time.Duration", Doc: "Timeout in seconds.",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, "Timeout in seconds.", prepared[0].Doc)
+}

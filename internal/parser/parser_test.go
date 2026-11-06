@@ -421,7 +421,9 @@ func TestFindOptFields_CollectionTagValidation(t *testing.T) {
 		{name: "put checks", typ: "map[string]int", tag: `optgen:"put" optcheck:"minlen=1"`, wanted: "optgen put cannot be combined with optcheck"},
 		{name: "set modifiers", typ: "map[string]struct{}", tag: `optgen:"set" optval:"clone"`, wanted: "optgen set cannot be combined with optval"},
 		{name: "invalid clone mode", typ: "[]string", tag: `optval:"clone=invalid"`, wanted: "unsupported clone mode"},
+		{name: "case insensitive invalid clone mode", typ: "[]string", tag: `optval:"Clone=INVALID"`, wanted: "unsupported clone mode"},
 		{name: "parseip eager clone", typ: "[]net.IP", tag: `optgen:"parseip" optval:"clone=eager"`, wanted: "parseip cannot be combined"},
+		{name: "case insensitive parseip eager clone", typ: "[]net.IP", tag: `optgen:"parseip" optval:"Clone=EAGER"`, wanted: "parseip cannot be combined"},
 		{name: "put unsupported guard", typ: "map[string]int", tag: `optgen:"put,notnil"`, wanted: "put cannot be combined with optgen modifier \"notnil\""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -431,6 +433,14 @@ func TestFindOptFields_CollectionTagValidation(t *testing.T) {
 			require.ErrorContains(t, err, tc.wanted)
 		})
 	}
+}
+
+func TestFindOptFieldsAcceptsCaseInsensitiveCloneEager(t *testing.T) {
+	t.Parallel()
+	pkg := parsePackage(t, map[string]string{"options.go": "package sample\ntype options struct { values []string `optval:\"Clone=EAGER\"` }"})
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Clone=EAGER"}, result.Fields[0].Modifiers)
 }
 
 func TestFindOptFieldsRejectsEmptyOptionDocDirective(t *testing.T) {

@@ -75,8 +75,6 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		// Mandatory fields have no option but appear in the constructor signature.
 		if field.SetterTarget == nil {
 			needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
-		} else if field.Default != "" {
-			needsTypeImports[field.FieldName] = true
 		}
 
 		typeDefs = append(typeDefs, result.TypeDefs...)

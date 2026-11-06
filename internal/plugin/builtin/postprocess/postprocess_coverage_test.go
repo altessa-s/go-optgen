@@ -170,6 +170,17 @@ func TestCloneModifierUsesPipelineOutputAndSupportsEagerSnapshot(t *testing.T) {
 	require.Empty(t, ctx.GetAdditionalImports())
 }
 
+func TestCloneModifierRecognizesEagerModeWithoutCaseSensitivity(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.InputVar = "v"
+	field := model.OptField{Type: "[]string", IsSlice: true, Modifiers: []string{"Clone=EAGER"}}
+	result := (&postprocess.CloneModifier{}).Generate(ctx, field, "v")
+	require.Contains(t, result.PreClosureCode, "slices.Clone(v)")
+	require.Empty(t, result.Code)
+}
+
 func TestCloneModifierUsesConfiguredInputVariable(t *testing.T) {
 	t.Parallel()
 

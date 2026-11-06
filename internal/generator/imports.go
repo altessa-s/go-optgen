@@ -97,7 +97,7 @@ func sourceImports(
 	for _, field := range fields {
 		// Only include imports for the field type if the generated code references the type
 		// (e.g., WithXxx parameter types) or if defaultOptions will reference a non-empty default.
-		if needsTypeImports[field.FieldName] || field.Default != "" {
+		if needsTypeImports[field.FieldName] {
 			for _, imp := range field.TypeImports {
 				imports.add(imp.Path, imp.Alias)
 			}
@@ -109,7 +109,11 @@ func sourceImports(
 		}
 
 		if needsCheckImports[field.FieldName] {
-			for _, value := range field.Checks {
+			for key, value := range field.Checks {
+				if field.Type == "string" && strings.EqualFold(key, "oneof") {
+					continue
+				}
+
 				addExpressionImports(imports, importByName, value)
 			}
 		}

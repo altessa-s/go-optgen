@@ -488,24 +488,59 @@ func hasInvalidType(sig *types.Signature) bool {
 }
 
 func containsInvalid(t types.Type) bool {
+	return containsInvalidType(t, make(map[types.Type]bool))
+}
+
+func containsInvalidType(t types.Type, visited map[types.Type]bool) bool {
+	if t == nil || visited[t] {
+		return false
+	}
+
+	visited[t] = true
+
+	if alias, ok := t.(*types.Alias); ok {
+		for arg := range alias.TypeArgs().Types() {
+			if containsInvalidType(arg, visited) {
+				return true
+			}
+		}
+	}
+
+	t = types.Unalias(t)
+
 	switch typ := t.(type) {
 	case *types.Basic:
 		return typ.Kind() == types.Invalid
 	case *types.Array:
-		return containsInvalid(typ.Elem())
+		return containsInvalidType(typ.Elem(), visited)
 	case *types.Slice:
-		return containsInvalid(typ.Elem())
+		return containsInvalidType(typ.Elem(), visited)
 	case *types.Pointer:
-		return containsInvalid(typ.Elem())
+		return containsInvalidType(typ.Elem(), visited)
 	case *types.Map:
-		return containsInvalid(typ.Key()) || containsInvalid(typ.Elem())
+		return containsInvalidType(typ.Key(), visited) || containsInvalidType(typ.Elem(), visited)
 	case *types.Chan:
-		return containsInvalid(typ.Elem())
+		return containsInvalidType(typ.Elem(), visited)
 	case *types.Signature:
-		return hasInvalidType(typ)
+		for param := range typ.Params().Variables() {
+			if containsInvalidType(param.Type(), visited) {
+				return true
+			}
+		}
+
+		for result := range typ.Results().Variables() {
+			if containsInvalidType(result.Type(), visited) {
+				return true
+			}
+		}
+
 	case *types.Named:
+		if typ.Obj().Pkg() == nil && typ.Obj().Parent() != types.Universe || containsInvalidType(typ.Underlying(), visited) {
+			return true
+		}
+
 		for arg := range typ.TypeArgs().Types() {
-			if containsInvalid(arg) {
+			if containsInvalidType(arg, visited) {
 				return true
 			}
 		}

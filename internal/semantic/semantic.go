@@ -60,6 +60,7 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		}
 
 		optionName := f.OptionName
+		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
 
 		f.OptionName = p.options.prefix + optionName
 		prefixOptionDocumentation(f, optionName, f.OptionName, p.options.prefix)
@@ -72,7 +73,6 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 			optionNames[f.OptionName] = f.FieldName
 		}
 
-		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
 		if !f.DefaultOnly && f.OptionName != "" && !token.IsIdentifier(f.OptionName) {
 			return nil, fmt.Errorf("field %s: invalid option name %q", f.FieldName, f.OptionName)
 		}
@@ -134,7 +134,12 @@ func prefixOptionDoc(doc, oldName, newName string) string {
 		return doc
 	}
 
-	return strings.TrimSuffix(functionName, oldName) + newName + doc[boundary:]
+	funcPrefix := strings.TrimSuffix(functionName, oldName)
+	if funcPrefix == "" {
+		return doc
+	}
+
+	return funcPrefix + newName + doc[boundary:]
 }
 
 // maxIsSetFields is the capacity of the uint64 field set behind WithIsSet.

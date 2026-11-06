@@ -138,6 +138,54 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 	}
 }
 
+// ParameterIdentifiers returns identifiers that an option parameter must not
+// shadow in the generated function body.
+func ParameterIdentifiers(ctx plugin.GenerationContext, field model.OptField, sources ...string) map[string]bool {
+	used := make(map[string]bool)
+	used[ctx.TypeName] = true
+	used["error"] = true
+	used["len"] = true
+	used["make"] = true
+	used["nil"] = true
+	used["new"] = true
+	used["true"] = true
+
+	for _, param := range ctx.GenericInfo.TypeParams {
+		used[param.Name] = true
+	}
+
+	if ctx.WithIsSet {
+		used[ctx.IsSetConst(field)] = true
+	}
+
+	for _, source := range sources {
+		for i := 0; i < len(source); {
+			if !isIdentifierStart(source[i]) {
+				i++
+				continue
+			}
+
+			start := i
+
+			for i < len(source) && isIdentifierContinue(source[i]) {
+				i++
+			}
+
+			used[source[start:i]] = true
+		}
+	}
+
+	return used
+}
+
+func isIdentifierStart(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+func isIdentifierContinue(c byte) bool {
+	return isIdentifierStart(c) || c >= '0' && c <= '9'
+}
+
 func startsWithGeneratedOptionFunction(doc string, ctx plugin.GenerationContext, field model.OptField) bool {
 	for _, candidate := range ctx.AllFields {
 		if candidate.FieldName != field.FieldName {

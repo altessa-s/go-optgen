@@ -94,3 +94,23 @@ func TestSourceImportsOnlyIncludesEmittedCheckAndErrorExpressions(t *testing.T) 
 	imports = sourceImports([]model.OptField{field}, local, map[string]bool{"mode": true}, nil, map[string]bool{"mode": true})
 	require.Equal(t, []model.GeneratedImport{{Path: "example.com/limits", Alias: "limits"}}, imports)
 }
+
+func TestSourceImportsDoesNotImportOptfnFieldTypeForCurrentPackageDefault(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{FieldName: "mapping", Type: "policy.Mapping", Default: "defaultMapping",
+		TypeImports:  []model.GeneratedImport{{Path: "example.com/policy", Alias: "policy"}},
+		SetterTarget: &model.SetterTarget{Expression: "makeMapping"}}
+	got := sourceImports([]model.OptField{field}, map[string]model.ImportInfo{"policy": {Path: "example.com/policy", Alias: "policy"}},
+		nil, nil, nil)
+	require.Empty(t, got)
+}
+
+func TestSourceImportsDoesNotTreatStringOneOfValuesAsExpressions(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{FieldName: "event", Type: "string", Checks: map[string]string{"oneof": "time.created,time.deleted"}}
+	got := sourceImports([]model.OptField{field}, map[string]model.ImportInfo{"time": {Path: "time"}}, nil,
+		map[string]bool{"event": true}, nil)
+	require.Empty(t, got)
+}

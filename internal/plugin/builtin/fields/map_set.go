@@ -48,5 +48,9 @@ func (p *MapSetPlugin) Generate(ctx plugin.GenerationContext, field model.OptFie
 		fieldtmpl.BaseData
 		Append      bool
 		ValuesParam string
-	}{BaseData: data, Append: plugin.IsTruthyMetadata(field.Metadata, "append"), ValuesParam: uniqueCollectionParameter("v", field.MapKeyType, field.Type)})
+	}{
+		BaseData:    data,
+		Append:      plugin.IsTruthyMetadata(field.Metadata, "append"),
+		ValuesParam: uniqueCollectionParameter("v", ctx, field, data.PostAssignment, field.MapKeyType, field.Type),
+	})
 }
