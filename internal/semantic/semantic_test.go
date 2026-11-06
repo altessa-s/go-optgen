@@ -384,3 +384,22 @@ func TestPrepareDoesNotPrefixOrdinaryFieldDocumentation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Timeout in seconds.", prepared[0].Doc)
 }
+
+func TestPrepareDoesNotRewriteOrdinaryDocWhoseFirstWordEndsInOptionName(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t), semantic.WithPrefix("Server")).Prepare([]model.OptField{{
+		FieldName: "port", OptionName: "Port", Type: "int", Doc: "DefaultPort is used when none is specified.",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, "DefaultPort is used when none is specified.", prepared[0].Doc)
+}
+
+func TestPrepareRejectsEmptyResets(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{
+		FieldName: "x", OptionName: "X", Type: "int", Metadata: map[string]string{"resets": ""},
+	}
+	_, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{field})
+	require.ErrorContains(t, err, "optgen resets requires non-empty field names")
+}

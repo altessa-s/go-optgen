@@ -42,7 +42,8 @@ func (p *SliceSetPlugin) CanHandle(field model.OptField) bool {
 }
 
 var sliceSetTemplate = fieldtmpl.Must("slice-set", `{{template "optionDoc" .}}
-func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
+func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(`+
+	`{{.InputVar}} {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
 	{{- .PreClosureCode}}
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{if .PostAssignment}}

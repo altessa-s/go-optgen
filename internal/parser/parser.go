@@ -402,8 +402,6 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			IsComparable:   resolved && facts.Comparable,
 			ElemComparable: elemResolved && elemFacts.Comparable,
 		}
-		base.Metadata = markMultipleOption(base.Metadata, len(field.Names) > 1)
-
 		base.CheckValueValid = checkValueFacts(field, parsed, types)
 
 		if len(parsed.SetterTargets) == 0 {
@@ -438,20 +436,6 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	}
 
 	return out, nil
-}
-
-func markMultipleOption(metadata map[string]string, multiple bool) map[string]string {
-	if !multiple {
-		return metadata
-	}
-
-	if metadata == nil {
-		metadata = make(map[string]string)
-	}
-
-	metadata["multiopt"] = tagValueTrue
-
-	return metadata
 }
 
 func checkValueFacts(field *ast.Field, parsed parsedFieldTags, resolver TypeResolver) map[string]bool {
@@ -759,7 +743,7 @@ func resolveSetterFields(
 
 		setterField.Metadata["optfn"] = tagValueTrue
 
-		if len(targets) > 1 || len(field.Names) > 1 {
+		if len(targets) > 1 {
 			setterField.Metadata["multiopt"] = "true"
 		}
 

@@ -35,13 +35,28 @@ func TestMapCollectionParametersDoNotShadowKeyTypes(t *testing.T) {
 		src   string
 	}{
 		{name: "put", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[key]int", IsMap: true, MapKeyType: "key", MapValueType: "int", Metadata: map[string]string{"put": "true"}}, gen: &fields.MapPutPlugin{}, src: "package sample\ntype key string\ntype options struct { entries map[key]int }\ntype Option func(*options)\n"},
+		{name: "put zero key name", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[zeroKey]int", IsMap: true, MapKeyType: "zeroKey", MapKeyString: true, MapValueType: "int", Metadata: map[string]string{"put": "true", "resets": "other"}}, gen: &fields.MapPutPlugin{}, src: "package sample\ntype zeroKey string\ntype options struct { entries map[zeroKey]int; other zeroKey }\ntype Option func(*options)\n"},
+		{name: "setter reset type name", field: model.OptField{FieldName: "mode", OptionName: "Mode", Type: "int", Metadata: map[string]string{"resets": "other"}}, gen: &fields.DefaultSetterPlugin{}, src: "package sample\ntype v int\ntype options struct { mode int; other v }\ntype Option func(*options)\n"},
 		{name: "set", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[v]struct{}", IsMap: true, MapKeyType: "v", Metadata: map[string]string{"set": "true"}}, gen: &fields.MapSetPlugin{}, src: "package sample\ntype v string\ntype options struct { entries map[v]struct{} }\ntype Option func(*options)\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			generated, err := tc.gen.Generate(newCtx(false), tc.field, nil)
+			ctx := newCtx(false)
+
+			switch tc.name {
+			case "put zero key name":
+				ctx.StructFields = []model.StructField{{Name: "other", Type: "zeroKey"}}
+			case "setter reset type name":
+				ctx.StructFields = []model.StructField{{Name: "other", Type: "v"}}
+			}
+
+			generated, err := tc.gen.Generate(ctx, tc.field, nil)
 			require.NoError(t, err)
+
+			if tc.name == "put zero key name" {
+				require.Contains(t, generated.Code, "new(zeroKey)")
+			}
 
 			fset := token.NewFileSet()
 			input, err := parser.ParseFile(fset, "input.go", tc.src, 0)

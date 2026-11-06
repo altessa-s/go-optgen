@@ -35,6 +35,8 @@ type Preparer struct {
 }
 
 const metadataTrue = "true"
+const timePackagePath = "time"
+const timePackageName = "time"
 
 // New binds the required catalog to a semantic preparer.
 func New(catalog Catalog, opts ...Option) *Preparer {
@@ -45,6 +47,12 @@ func New(catalog Catalog, opts ...Option) *Preparer {
 // carry the configured prefix, checks of disabled plugins are dropped with a
 // warning, and type defaults and default modifiers are resolved.
 func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
+	for _, field := range fields {
+		if err := validateFieldMetadata(field); err != nil {
+			return nil, err
+		}
+	}
+
 	out := slices.DeleteFunc(slices.Clone(fields), p.excluded)
 	optionNames := make(map[string]string, len(out))
 
@@ -81,7 +89,7 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 			if f.Default == "" {
 				f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
 			} else {
-				f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
+				f.Default = p.normalizeDefault(*f, f.Default)
 			}
 
 			f.Modifiers = nil
@@ -97,7 +105,7 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		if f.Default == "" && f.Metadata["put"] != "true" {
 			f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
 		} else if f.Default != "" {
-			f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
+			f.Default = p.normalizeDefault(*f, f.Default)
 		}
 
 		f.Modifiers = policy.modifiers(*f)
@@ -129,6 +137,9 @@ func prefixOptionDoc(doc, oldName, newName string) string {
 	}
 
 	functionName := doc[:boundary]
+	if !strings.HasPrefix(functionName, "With") && !strings.HasPrefix(functionName, "Set") {
+		return doc
+	}
 
 	if strings.HasSuffix(functionName, newName) || !strings.HasSuffix(functionName, oldName) {
 		return doc
@@ -210,7 +221,7 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 		delete(checks, key)
 
 		if strings.EqualFold(key, "min") {
-			value = p.catalog.NormalizeDefault(f.Type, value)
+			value = p.normalizeDefault(*f, value)
 		}
 
 		checks[canonicalKey] = value
@@ -227,6 +238,41 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 	f.Checks = checks
 
 	return nil
+}
+
+func (p *Preparer) normalizeDefault(field model.OptField, value string) string {
+	typeName := field.Type
+	if strings.HasSuffix(typeName, ".Duration") {
+		for _, imp := range field.TypeImports {
+			if imp.Path == timePackagePath {
+				typeName = timePackageName + ".Duration"
+				break
+			}
+		}
+	}
+
+	return rewriteTimeAlias(p.catalog.NormalizeDefault(typeName, value), field.TypeImports)
+}
+
+func rewriteTimeAlias(expression string, imports []model.GeneratedImport) string {
+	for _, imp := range imports {
+		if imp.Path != timePackagePath {
+			continue
+		}
+
+		alias := imp.Alias
+		if alias == "" {
+			alias = timePackageName
+		}
+
+		if alias != timePackageName {
+			expression = strings.ReplaceAll(expression, timePackageName+".", alias+".")
+		}
+
+		break
+	}
+
+	return expression
 }
 
 func (p *Preparer) warn(msg string) {
@@ -251,21 +297,13 @@ func validateFieldRelations(fields []model.OptField, structFields []model.Struct
 }
 
 func validateFieldRelationsForOne(field model.OptField, byName map[string]model.StructField) error {
-	if value, exists := field.Metadata["onfail"]; exists && value != "skip" {
-		return fmt.Errorf("field %s: optgen onfail value %q is invalid (want skip)", field.FieldName, value)
+	if err := validateFieldMetadata(field); err != nil {
+		return err
 	}
 
 	enables := strings.TrimSpace(field.Metadata["enables"])
 
 	resets := splitResetFields(field.Metadata["resets"])
-	if _, exists := field.Metadata["enables"]; exists && enables == "" {
-		return fmt.Errorf("field %s: optgen enables requires a field name", field.FieldName)
-	}
-
-	if _, exists := field.Metadata["resets"]; exists && slices.Contains(resets, "") {
-		return fmt.Errorf("field %s: optgen resets requires non-empty field names", field.FieldName)
-	}
-
 	if enables != "" && slices.Contains(resets, enables) {
 		return fmt.Errorf("field %s: optgen field %s cannot be both enabled and reset", field.FieldName, enables)
 	}
@@ -278,6 +316,25 @@ func validateFieldRelationsForOne(field model.OptField, byName map[string]model.
 		if err := validateFieldRelationTarget(field, target, enables, byName); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func validateFieldMetadata(field model.OptField) error {
+	if value, exists := field.Metadata["onfail"]; exists && value != "skip" {
+		return fmt.Errorf("field %s: optgen onfail value %q is invalid (want skip)", field.FieldName, value)
+	}
+
+	enables := strings.TrimSpace(field.Metadata["enables"])
+
+	resets := splitResetFields(field.Metadata["resets"])
+	if _, exists := field.Metadata["enables"]; exists && enables == "" {
+		return fmt.Errorf("field %s: optgen enables requires a field name", field.FieldName)
+	}
+
+	if _, exists := field.Metadata["resets"]; exists && (len(resets) == 0 || slices.Contains(resets, "")) {
+		return fmt.Errorf("field %s: optgen resets requires non-empty field names", field.FieldName)
 	}
 
 	return nil

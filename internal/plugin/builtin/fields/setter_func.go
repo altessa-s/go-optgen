@@ -78,7 +78,6 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	}
 
 	used := fieldtmpl.ParameterIdentifiers(ctx, field, sources...)
-	used["o"] = true
 
 	for _, imp := range target.Imports {
 		if imp.Alias != "" {
@@ -90,7 +89,7 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 
 	args := make([]string, 0, len(target.Parameters))
 	for i, param := range target.Parameters {
-		name := uniqueParameterName(param.Name, i, used)
+		name := fieldtmpl.UniqueParameterName(parameterBaseName(param.Name, i), used)
 		used[name] = true
 
 		typ := param.Type
@@ -130,13 +129,9 @@ func (p *SetterFuncPlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	return fieldtmpl.Execute(setterFuncTemplate, &data)
 }
 
-func uniqueParameterName(name string, index int, used map[string]bool) string {
+func parameterBaseName(name string, index int) string {
 	if name == "" || name == "_" {
 		name = fmt.Sprintf("arg%d", index)
-	}
-
-	for used[name] {
-		name += setterParameterSuffix
 	}
 
 	return name

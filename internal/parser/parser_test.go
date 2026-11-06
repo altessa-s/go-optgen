@@ -956,3 +956,12 @@ func TestFindOptFieldsRejectsDeclarationsInSeveralFiles(t *testing.T) {
 	_, err := parser.FindOptFields(pkg, "options", false, nil)
 	require.ErrorContains(t, err, "type options is declared in several files (options_darwin.go, options_linux.go)")
 }
+
+func TestGroupedFieldsDoNotCountAsMultiOption(t *testing.T) {
+	t.Parallel()
+	pkg := parsePackage(t, map[string]string{"options.go": "package sample\ntype options struct { // WithA configures A.\n a, b string }\n"})
+	result, err := parser.FindOptFields(pkg, "options", true, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, "true", result.Fields[0].Metadata["multiopt"])
+	require.NotEqual(t, "true", result.Fields[1].Metadata["multiopt"])
+}

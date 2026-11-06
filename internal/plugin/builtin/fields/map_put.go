@@ -29,8 +29,8 @@ func {{.FuncPrefix}}{{.OptionName}}`+
 	`{{.ValueParam}} {{.MapValueType}}) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{- if .MapKeyString}}
-		var zeroKey {{.MapKeyType}}
-		if {{.KeyParam}} == zeroKey { return{{if .OptionReturnsError}} nil{{end}} }
+		var {{.ZeroKeyName}} {{.MapKeyType}}
+		if {{.KeyParam}} == {{.ZeroKeyName}} { return{{if .OptionReturnsError}} nil{{end}} }
 {{- end}}
 {{- if .MapValueNilable}}
 		if {{.ValueParam}} == nil { return{{if .OptionReturnsError}} nil{{end}} }
@@ -48,12 +48,16 @@ func (p *MapPutPlugin) Generate(ctx plugin.GenerationContext, field model.OptFie
 	data.DocSummary = "adds a " + field.FieldName + " entry."
 	keyParam := uniqueCollectionParameter("key", ctx, field, data.PostAssignment, field.MapKeyType, field.MapValueType, field.Type)
 	valueParam := uniqueCollectionParameter("value", ctx, field, data.PostAssignment, field.MapKeyType, field.MapValueType, field.Type, keyParam)
+	zeroKeyName := uniqueCollectionParameter(
+		"zeroKey", ctx, field, data.PostAssignment, field.MapKeyType, field.MapValueType, field.Type, keyParam, valueParam,
+	)
 
 	return fieldtmpl.Execute(mapPutTemplate, &struct {
 		fieldtmpl.BaseData
-		KeyParam   string
-		ValueParam string
-	}{BaseData: data, KeyParam: keyParam, ValueParam: valueParam})
+		KeyParam    string
+		ValueParam  string
+		ZeroKeyName string
+	}{BaseData: data, KeyParam: keyParam, ValueParam: valueParam, ZeroKeyName: zeroKeyName})
 }
 
 func uniqueCollectionParameter(name string, ctx plugin.GenerationContext, field model.OptField, sources ...string) string {

@@ -276,7 +276,18 @@ func (r typeFacts) ResolveSetterTarget(
 	}
 
 	target := model.SetterTarget{Expression: expression, Method: method, ReturnsError: returnsError}
+
 	importsForTarget := newTargetImports(r.types, imports, expression, method, targetPackage)
+	if !method && targetPackage != nil && targetPackage.Path() != r.types.Path() {
+		if root := expressionRootIdentifier(expression); root != "" {
+			if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok && fn.Pkg().Path() == r.types.Path() {
+				// Keep functions declared in the current package unqualified.
+			} else {
+				target.Expression = importsForTarget.qualifier(targetPackage) + "." + expression
+			}
+		}
+	}
+
 	target.Parameters = setterParameters(signature, importsForTarget.qualifier)
 	target.Imports = importsForTarget.imports
 
@@ -313,7 +324,39 @@ func (r typeFacts) setterSignature(field ast.Expr, pos token.Pos, expression str
 		return nil, nil, fmt.Errorf("target is not a function")
 	}
 
+	if root := expressionRootIdentifier(expression); root != "" {
+		if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok {
+			return sig, fn.Pkg(), nil
+		}
+
+		for _, imported := range r.types.Imports() {
+			if fn, ok := imported.Scope().Lookup(root).(*types.Func); ok {
+				return sig, fn.Pkg(), nil
+			}
+		}
+	}
+
 	return sig, r.types, nil
+}
+
+func expressionRootIdentifier(expression string) string {
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return ""
+	}
+
+	for {
+		switch node := expr.(type) {
+		case *ast.IndexExpr:
+			expr = node.X
+		case *ast.IndexListExpr:
+			expr = node.X
+		case *ast.Ident:
+			return node.Name
+		default:
+			return ""
+		}
+	}
 }
 
 type targetImportResolver struct {
@@ -342,32 +385,45 @@ func newTargetImports(
 	}
 
 	if !method {
-		for _, prefix := range selectorPrefixes(expression) {
-			imp, found := imports[prefix]
-			if !found {
-				for _, imported := range current.Imports() {
-					if imported.Name() == prefix {
-						imp = model.ImportInfo{Path: imported.Path()}
-						found = true
-
-						break
-					}
-				}
-			}
-
-			if found && imp.Path != "" {
-				alias := imp.Alias
-				if alias == "_" || alias == "." {
-					alias = ""
-				}
-
-				resolver.aliases[imp.Path] = alias
-				resolver.imports = append(resolver.imports, model.GeneratedImport{Path: imp.Path, Alias: alias})
-			}
-		}
+		addSelectorImports(&resolver, current, imports, expression)
 	}
 
 	return resolver
+}
+
+func addSelectorImports(resolver *targetImportResolver, current *types.Package, imports map[string]model.ImportInfo, expression string) {
+	for _, prefix := range selectorPrefixes(expression) {
+		imp, found := importForPrefix(current, imports, prefix)
+		if !found || imp.Path == "" {
+			continue
+		}
+
+		alias := imp.Alias
+		if alias == "_" || alias == "." {
+			alias = ""
+		}
+
+		if alias == "" && prefix != derivePackageName(imp.Path) {
+			alias = prefix
+		}
+
+		resolver.aliases[imp.Path] = alias
+		resolver.imports = append(resolver.imports, model.GeneratedImport{Path: imp.Path, Alias: alias})
+	}
+}
+
+func importForPrefix(current *types.Package, imports map[string]model.ImportInfo, prefix string) (model.ImportInfo, bool) {
+	if imp, ok := imports[prefix]; ok {
+		return imp, true
+	}
+
+	for _, imported := range current.Imports() {
+		if imported.Name() == prefix {
+			return model.ImportInfo{Path: imported.Path(), Alias: prefix}, true
+		}
+	}
+
+	return model.ImportInfo{}, false
 }
 
 func (r *targetImportResolver) qualifier(pkg *types.Package) string {

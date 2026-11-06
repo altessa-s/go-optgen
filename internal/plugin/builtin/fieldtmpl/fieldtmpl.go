@@ -143,7 +143,11 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 func ParameterIdentifiers(ctx plugin.GenerationContext, field model.OptField, sources ...string) map[string]bool {
 	used := make(map[string]bool)
 	used[ctx.TypeName] = true
+	used["o"] = true
 	used["error"] = true
+	used["false"] = true
+	used["append"] = true
+	used["any"] = true
 	used["len"] = true
 	used["make"] = true
 	used["nil"] = true
@@ -158,24 +162,58 @@ func ParameterIdentifiers(ctx plugin.GenerationContext, field model.OptField, so
 		used[ctx.IsSetConst(field)] = true
 	}
 
-	for _, source := range sources {
-		for i := 0; i < len(source); {
-			if !isIdentifierStart(source[i]) {
-				i++
+	for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
+		target = strings.TrimSpace(target)
+
+		for _, sourceField := range ctx.StructFields {
+			if sourceField.Name != target {
 				continue
 			}
 
-			start := i
+			addIdentifiers(used, sourceField.Type)
 
-			for i < len(source) && isIdentifierContinue(source[i]) {
-				i++
+			for _, imp := range sourceField.TypeImports {
+				addIdentifiers(used, imp.Alias)
 			}
 
-			used[source[start:i]] = true
+			break
 		}
 	}
 
+	for _, source := range sources {
+		addIdentifiers(used, source)
+	}
+
+	addIdentifiers(used, field.Metadata["err"])
+
 	return used
+}
+
+func addIdentifiers(used map[string]bool, source string) {
+	for i := 0; i < len(source); {
+		if !isIdentifierStart(source[i]) {
+			i++
+			continue
+		}
+
+		start := i
+
+		for i < len(source) && isIdentifierContinue(source[i]) {
+			i++
+		}
+
+		used[source[start:i]] = true
+	}
+}
+
+// UniqueParameterName returns preferred with Arg suffixes until it avoids every
+// identifier referenced by the generated function body.
+func UniqueParameterName(preferred string, used map[string]bool) string {
+	for used[preferred] {
+		preferred += "Arg"
+	}
+
+	return preferred
 }
 
 func isIdentifierStart(c byte) bool {
@@ -284,12 +322,19 @@ type Data struct {
 	BaseData
 	PipelineCode string
 	ValueExpr    string
+	InputVar     string
 	Final        bool
 }
 
 // NewData runs values for field starting from inputVar.
 func NewData(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline, inputVar string) Data {
-	result := values.BuildPipeline(ctx, field, inputVar)
+	used := ParameterIdentifiers(ctx, field, field.Type, field.ElemType, field.MapKeyType, field.MapValueType)
+	inputVar = UniqueParameterName(inputVar, used)
+
+	result := plugin.PipelineResult{ValueVar: inputVar}
+	if values != nil {
+		result = values.BuildPipeline(ctx, field, inputVar)
+	}
 
 	code := ""
 	if result.Code != "" {
@@ -309,7 +354,7 @@ func NewData(ctx plugin.GenerationContext, field model.OptField, values plugin.P
 	base := NewBaseData(ctx, baseField)
 	base.PreClosureCode = result.PreClosureCode
 
-	return Data{BaseData: base, PipelineCode: code, ValueExpr: result.ValueVar, Final: result.EarlyReturn}
+	return Data{BaseData: base, PipelineCode: code, ValueExpr: result.ValueVar, InputVar: inputVar, Final: result.EarlyReturn}
 }
 
 // markSet returns the statement recording that the option of field was

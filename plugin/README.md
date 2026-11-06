@@ -27,6 +27,7 @@ generator can implement extensions with stable interfaces; the `optgen` CLI regi
 | Transform      | 2     | Value transformations (e.g. `lower`, `trimspaces`, `trimprefix`)                     |
 | PostProcess    | 3     | Final cleanup after transforms (e.g. `dedup`, `positive`, `nonempty`)                |
 | Check          | 4     | Validation (e.g. `required`, `min`, `minlen`, `maxlen`, `oneof`)                     |
+| Clone          | 5     | Copies final collection values after all other modifiers                           |
 
 ## Registration
 
@@ -77,7 +78,7 @@ Pipeline execution is separate from registration: construct it with `plugin.NewP
 | `Meta`             | Plugin metadata: name, kind, priority, and applicable types                              |
 | `GenerationContext`| Per-field context passed to plugins with struct info, imports, and helpers                |
 | `GeneratedCode`    | Output of `FieldPlugin.Generate`: code, type definitions, and helper functions           |
-| `Phase` | Modifier execution phase: guard, transform, post-process, or check |
+| `Phase` | Modifier execution phase: guard, transform, post-process, check, or clone |
 | `ModifierResult` | Output of `ModifierPlugin.Generate`: code lines, output variable, and termination flag |
 | `PipelineResult` | Combined pipeline code, final value variable, and early-return flag |
 | `CheckSpec` | Validation key, parameter requirement, and ordering priority |

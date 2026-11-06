@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -120,19 +121,25 @@ func TestGeneratorOptfnParametersAvoidGeneratedBodyIdentifiers(t *testing.T) {
 	}}}
 	prepared, err := semantic.New(r).Prepare([]model.OptField{field})
 	require.NoError(t, err)
+
+	settings := model.RenderSettings{TypeName: "options", OptionType: "Option", OptionReturnsError: true, WithIsSet: true}
 	generated, err := generator.New(r, plugin.NewPipeline(r)).Generate(model.GenerateInput{
-		TypeName: "options", OptionType: "Option", OptionReturnsError: true, PackageName: "sample", Fields: prepared,
-		StructFields: []model.StructField{{Name: "active", Type: "bool"}, {Name: "other", Type: "int"}},
+		RenderSettings: settings,
+		PackageName:    "sample", Fields: prepared, IsSetField: "set",
+		StructFields: []model.StructField{{Name: "active", Type: "bool"}, {Name: "other", Type: "int"}, {Name: "set", Type: "uint64"}},
 	})
 	require.NoError(t, err)
 
 	fset := token.NewFileSet()
-	input, err := parser.ParseFile(fset, "input.go", "package sample\ntype RetryConfig int\ntype options struct { retry RetryConfig; active bool; other int }\ntype Option func(*options) error\nfunc configureRetry(options, error, new, make, len string) RetryConfig { return 0 }", 0)
+	input, err := parser.ParseFile(fset, "input.go", "package sample\ntype RetryConfig int\ntype options struct { retry RetryConfig; active bool; other int; set uint64 }\ntype Option func(*options) error\nfunc configureRetry(options, error, new, make, len string) RetryConfig { return 0 }", 0)
 	require.NoError(t, err)
 	output, err := parser.ParseFile(fset, "options_gen.go", generated, 0)
 	require.NoError(t, err)
 	_, err = (&types.Config{Importer: importer.Default()}).Check("sample", fset, []*ast.File{input, output}, nil)
 	require.NoError(t, err, "generated setters must not shadow identifiers used in their body")
+
+	generatedText := string(generated)
+	require.Less(t, strings.Index(generatedText, "if optgenErr != nil"), strings.Index(generatedText, "o.set |= 1 <<"))
 	require.Contains(t, string(generated), "optionsArg string")
 	require.Contains(t, string(generated), "errorArg string")
 	require.Contains(t, string(generated), "newArg string")

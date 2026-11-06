@@ -63,7 +63,7 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}() {{.OptionType}}{{.TypeP
 }`)
 
 var boolSetterTemplate = fieldtmpl.Must("bool_setter", `{{template "optionDoc" .}}
-func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v bool) {{.OptionType}}{{.TypeParamsNames}} {
+func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.InputVar}} bool) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 		{{.PipelineCode}}{{if not .Final}}{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{if .PostAssignment}}
 		{{.PostAssignment}}{{end}}{{end}}

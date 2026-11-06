@@ -192,10 +192,11 @@ func TestReaderResolvesOptfnImportsFromSelectorsAndGenericArguments(t *testing.T
 
 	dir := t.TempDir()
 	for name, content := range map[string]string{
-		"go.mod":         "module sample\n\ngo 1.26\n",
-		"options.go":     "package sample\nimport codec \"sample/codec\"\nimport \"sample/v3\"\ntype Box[T any] struct{ value T }\nfunc makeBox[T any](id string) Box[T] { return Box[T]{} }\ntype options struct { result codec.Result `optfn:\"Result=codec.Parse\"`; generic Box[yaml.Item] `optfn:\"Generic=makeBox[yaml.Item]\"` }\n",
-		"codec/codec.go": "package codec\ntype Result struct{}\nfunc Parse(codec string) Result { return Result{} }\n",
-		"v3/yaml.go":     "package yaml\ntype Item struct{}\n",
+		"go.mod":               "module sample\n\ngo 1.26\n",
+		"options.go":           "package sample\nimport codeclib \"sample/codec\"\nimport \"sample/v3\"\nimport \"sample/go-codec/v9\"\ntype Box[T any] struct{ value T }\nfunc makeBox[T any](id string) Box[T] { return Box[T]{} }\ntype options struct { result codeclib.Result `optfn:\"Result=codeclib.Parse\"`; generic Box[yaml.Item] `optfn:\"Generic=makeBox[yaml.Item]\"`; token redis.Token `optfn:\"Token=redis.NewToken\"` }\n",
+		"codec/codec.go":       "package codec\ntype Result struct{}\nfunc Parse(codec string) Result { return Result{} }\n",
+		"go-codec/v9/codec.go": "package redis\ntype Token struct{}\nfunc NewToken(options codecOption) Token { return Token{} }\ntype codecOption string\n",
+		"v3/yaml.go":           "package yaml\ntype Item struct{}\n",
 	} {
 		path := filepath.Join(dir, name)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
@@ -210,9 +211,33 @@ func TestReaderResolvesOptfnImportsFromSelectorsAndGenericArguments(t *testing.T
 		byOption[field.OptionName] = *field.SetterTarget
 	}
 
-	for _, name := range []string{"Result", "Generic"} {
+	for _, name := range []string{"Result", "Generic", "Token"} {
 		require.NotEmpty(t, byOption[name].Imports, name)
 	}
+
+	require.Equal(t, []model.GeneratedImport{{Path: "sample/go-codec/v9", Alias: "redis"}}, byOption["Token"].Imports)
+}
+
+func TestReaderResolvesDotImportedOptfnTargetImport(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":           "module sample\n\ngo 1.26\n",
+		"options.go":       "package sample\nimport . \"sample/policy\"\ntype options struct { mapping Mapping `optfn:\"Mapping=NewMapping\"` }\n",
+		"policy/policy.go": "package policy\ntype Mapping struct{}\nfunc NewMapping(key string) Mapping { return Mapping{} }\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	target := packages[0].Fields[0].SetterTarget
+	require.Equal(t, "policy.NewMapping", target.Expression)
+	require.Equal(t, []model.GeneratedImport{{Path: "sample/policy"}}, target.Imports)
 }
 
 func TestReaderResolvesCheckConstantsFromGeneratedFiles(t *testing.T) {
@@ -302,7 +327,7 @@ func TestReaderDurationCheckBoundsNormalizeAfterTypedLoading(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{
 		"go.mod":     "module sample\n\ngo 1.26\n",
-		"options.go": "package sample\nimport \"time\"\ntype options struct { one time.Duration `optcheck:\"min=1s\"`; zero time.Duration `optcheck:\"min=0s\"`; nanos time.Duration `optcheck:\"min=100ns\"` }\n",
+		"options.go": "package sample\nimport clock \"time\"\ntype options struct { one clock.Duration `optcheck:\"min=1s\"`; zero clock.Duration `optcheck:\"min=0s\"`; nanos clock.Duration `optcheck:\"min=100ns\"` }\n",
 	} {
 		path := filepath.Join(dir, name)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
@@ -322,7 +347,7 @@ func TestReaderDurationCheckBoundsNormalizeAfterTypedLoading(t *testing.T) {
 		checks[field.FieldName] = field.Checks["min"]
 	}
 
-	require.Equal(t, map[string]string{"one": "1 * time.Second", "zero": "0 * time.Hour", "nanos": "time.Duration(100)"}, checks)
+	require.Equal(t, map[string]string{"one": "1 * clock.Second", "zero": "0 * clock.Hour", "nanos": "clock.Duration(100)"}, checks)
 }
 
 func TestSourcePackageDoesNotExposeTypeCheckerState(t *testing.T) {
