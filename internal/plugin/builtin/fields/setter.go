@@ -47,29 +47,30 @@ func (p *DefaultSetterPlugin) Meta() plugin.Meta {
 	}
 }
 
-var setterTemplate = fieldtmpl.Must("setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
-func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{.Type}}) {{.OptionType}}{{.TypeParamsNames}} {
+var setterTemplate = fieldtmpl.Must("setter", `{{template "optionDoc" .}}
+func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.InputVar}} {{.Type}}) {{.OptionType}}{{.TypeParamsNames}} {
+	{{- .PreClosureCode}}
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
 {{.PipelineCode}}{{if not .Final}}{{if .SkipEmpty}}		if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
-{{end}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
-{{- end}}{{- template "optionReturn" . }}
+{{end}}		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{if .PostAssignment}}
+		{{.PostAssignment}}{{end}}{{- end}}{{- template "optionReturn" . }}
 	}
 }`)
 
-var stringSetterTemplate = fieldtmpl.Must("string_setter", `// {{.FuncPrefix}}{{.OptionName}} sets the {{.FieldName}} option.{{.DocComment}}
-func {{.FuncPrefix}}{{.OptionName}}[T interface{string|*string}](v T) {{.OptionType}} {
+var stringSetterTemplate = fieldtmpl.Must("string_setter", `{{template "optionDoc" .}}
+func {{.FuncPrefix}}{{.OptionName}}[T interface{string|*string}]({{.ParamVar}} T) {{.OptionType}} {
  return func(o *{{.TypeName}}){{if .OptionReturnsError}} error{{end}} {
- var value string
- switch t := any(v).(type) {
- case string: value = t
+ var {{.ValueLocal}} string
+ switch {{.TypeSwitchLocal}} := any({{.ParamVar}}).(type) {
+ case string: {{.ValueLocal}} = {{.TypeSwitchLocal}}
  case *string:
- if t == nil { return{{if .OptionReturnsError}} nil{{end}} }
- value = *t
+ if {{.TypeSwitchLocal}} == nil { return{{if .OptionReturnsError}} nil{{end}} }
+ {{.ValueLocal}} = *{{.TypeSwitchLocal}}
  }
 {{.PipelineCode}}{{if not .Final}}
 {{if not .KeepEmptyStrings}} if {{.ValueExpr}} == "" { return{{if .OptionReturnsError}} nil{{end}} }
-{{end}} {{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
-{{- end}}{{- template "optionReturn" . }}
+{{end}} {{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}{{if .PostAssignment}}
+ {{.PostAssignment}}{{end}}{{- end}}{{- template "optionReturn" . }}
  }
 }`)
 
@@ -95,12 +96,22 @@ func (p *DefaultSetterPlugin) Generate(ctx plugin.GenerationContext, field model
 		SkipEmpty: field.Type == "string" && ctx.StringSetter == model.StringSetterPlain && !ctx.KeepEmptyStrings,
 	}
 
-	return fieldtmpl.Execute(setterTemplate, data)
+	return fieldtmpl.Execute(setterTemplate, &data)
 }
 
 func (p *DefaultSetterPlugin) generateStringSetter(
 	ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline,
 ) (plugin.GeneratedCode, error) {
 	data := fieldtmpl.NewData(ctx, field, values, "value")
-	return fieldtmpl.Execute(stringSetterTemplate, data)
+	used := fieldtmpl.ParameterIdentifiers(ctx, field, data.PostAssignment, field.Type)
+	paramVar := fieldtmpl.UniqueParameterName("v", used)
+	used[paramVar] = true
+	typeSwitchLocal := fieldtmpl.UniqueParameterName("t", used)
+
+	return fieldtmpl.Execute(stringSetterTemplate, &struct {
+		fieldtmpl.Data
+		ValueLocal      string
+		TypeSwitchLocal string
+		ParamVar        string
+	}{Data: data, ValueLocal: data.InputVar, TypeSwitchLocal: typeSwitchLocal, ParamVar: paramVar})
 }

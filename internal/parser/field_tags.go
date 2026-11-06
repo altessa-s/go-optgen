@@ -7,11 +7,13 @@ package parser
 import "maps"
 
 type parsedFieldTags struct {
-	Default    string
-	Metadata   map[string]string
-	Modifiers  []string
-	Checks     map[string]string
-	BareChecks map[string]bool
+	Default       string
+	Metadata      map[string]string
+	Modifiers     []string
+	Checks        map[string]string
+	BareChecks    map[string]bool
+	SetterTargets map[string]string
+	TagError      error
 }
 
 func parseFieldTags(tagStr string) parsedFieldTags {
@@ -31,7 +33,11 @@ func parseFieldTags(tagStr string) parsedFieldTags {
 	}
 
 	out.Checks = parseOptChecks(ParseTag(tagStr, "optcheck"))
+
 	out.BareChecks = bareKeys(smartSplit(ParseTag(tagStr, "optcheck")))
+	if value, exists := LookupTag(tagStr, "optfn"); exists {
+		out.SetterTargets, out.TagError = ParseSetterTargets(value)
+	}
 
 	return out
 }

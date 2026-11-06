@@ -266,6 +266,8 @@ func IsNilableType(expr ast.Expr) bool {
 		return true
 	case *ast.InterfaceType: // any
 		return true
+	case *ast.Ident:
+		return t.Name == "any" || t.Name == "error"
 	default:
 		return false
 	}

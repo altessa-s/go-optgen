@@ -93,6 +93,7 @@ func (s *Service) Generate(ctx context.Context, req Request) ([]Artifact, error)
 			RenderSettings:      req.Settings,
 			PackageName:         pkg.Name,
 			Fields:              pkg.Fields,
+			StructFields:        pkg.StructFields,
 			Imports:             pkg.Imports,
 			NormalizationMethod: pkg.NormalizationMethod,
 			IsSetField:          pkg.IsSetField,

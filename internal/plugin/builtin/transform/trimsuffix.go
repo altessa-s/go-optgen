@@ -34,7 +34,7 @@ func (t *TrimSuffixTransformPlugin) Apply(ctx plugin.GenerationContext, field mo
 		return expr, false
 	}
 
-	ctx.AddImport("strings")
+	pkg := ctx.AddStdlibImport("strings", "strings")
 
-	return "strings.TrimSuffix(" + expr + ", " + quote(suffix) + ")", true
+	return pkg + ".TrimSuffix(" + expr + ", " + quote(suffix) + ")", true
 }

@@ -64,6 +64,58 @@ func TestPrepareCopiesFieldsAndRespectsDisabledDefaults(t *testing.T) {
 	require.Empty(t, prepared[0].Modifiers, "disabler keys are removed even when their plugin is disabled")
 }
 
+func TestPrepareNormalizesMinAndSuppressesDurationPositiveDefault(t *testing.T) {
+	t.Parallel()
+	r := builtinRegistry(t)
+	prepared, err := semantic.New(r).Prepare([]model.OptField{{FieldName: "timeout", Type: "time.Duration", IsNumeric: true,
+		Checks: map[string]string{"min": "1s"}}})
+	require.NoError(t, err)
+	require.Equal(t, "1 * time.Second", prepared[0].Checks["min"])
+	require.NotContains(t, prepared[0].Modifiers, "positive")
+}
+
+func TestPrepareSuppressesPositiveForCaseInsensitiveMinCheck(t *testing.T) {
+	t.Parallel()
+	r := builtinRegistry(t)
+	prepared, err := semantic.New(r).Prepare([]model.OptField{{FieldName: "retries", Type: "int", IsNumeric: true,
+		Checks: map[string]string{"Min": "0"}}})
+	require.NoError(t, err)
+	require.Equal(t, "0", prepared[0].Checks["min"])
+	require.NotContains(t, prepared[0].Modifiers, "positive")
+}
+
+func TestPrepareInputValidatesEnablesAndResets(t *testing.T) {
+	t.Parallel()
+	r := builtinRegistry(t)
+	base := model.GenerateInput{
+		Fields:       []model.OptField{{FieldName: "enabled", Type: "bool", Metadata: map[string]string{"enables": "active", "resets": "pointer|callback"}}},
+		StructFields: []model.StructField{{Name: "active", Type: "bool", IsBool: true}, {Name: "pointer", Type: "*int"}, {Name: "callback", Type: "func()"}},
+	}
+	_, err := semantic.New(r).PrepareInput(base)
+	require.NoError(t, err)
+
+	cases := []struct {
+		name    string
+		field   model.OptField
+		structs []model.StructField
+		want    string
+	}{
+		{name: "unknown", field: model.OptField{FieldName: "x", Metadata: map[string]string{"enables": "missing"}}, want: "does not exist"},
+		{name: "not bool", field: model.OptField{FieldName: "x", Metadata: map[string]string{"enables": "target"}}, structs: []model.StructField{{Name: "target", Type: "int"}}, want: "must be bool"},
+		{name: "both", field: model.OptField{FieldName: "x", Metadata: map[string]string{"enables": "target", "resets": "target"}}, structs: []model.StructField{{Name: "target", Type: "bool"}}, want: "both enabled and reset"},
+		{name: "self", field: model.OptField{FieldName: "x", Metadata: map[string]string{"resets": "x"}}, structs: []model.StructField{{Name: "x", Type: "int"}}, want: "cannot enable or reset itself"},
+		{name: "onfail invalid", field: model.OptField{FieldName: "x", Metadata: map[string]string{"onfail": "panic"}}, want: "onfail value"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := semantic.New(r).PrepareInput(model.GenerateInput{Fields: []model.OptField{tc.field}, StructFields: tc.structs})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 // TestOptcheckKeysDoNotResolveModifiers pins that a modifier key is not a
 // valid optcheck key: checks resolve through check plugins only.
 func TestOptcheckKeysDoNotResolveModifiers(t *testing.T) {
@@ -96,7 +148,7 @@ func TestPrepareRejectsInapplicableChecks(t *testing.T) {
 		{"minlen on int", model.OptField{FieldName: "n", Type: "int", Checks: map[string]string{"minlen": "3"}}, plugin.ErrNotApplicable},
 		{"required on bool", model.OptField{FieldName: "b", Type: "bool", Checks: map[string]string{"required": ""}}, plugin.ErrNotApplicable},
 		{"nonzero on string", model.OptField{FieldName: "s", Type: "string", Checks: map[string]string{"nonzero": ""}}, plugin.ErrNotApplicable},
-		{"oneof on int", model.OptField{FieldName: "n", Type: "int", Checks: map[string]string{"oneof": "a"}}, plugin.ErrNotApplicable},
+		{"oneof on slice", model.OptField{FieldName: "n", Type: "[]int", IsSlice: true, Checks: map[string]string{"oneof": "a"}}, plugin.ErrNotApplicable},
 		{"empty oneof list", model.OptField{FieldName: "s", Type: "string", Checks: map[string]string{"oneof": "[]"}}, plugin.ErrInvalidCheckValue},
 		{"required on named interface", model.OptField{FieldName: "w", Type: "io.Writer", Checks: map[string]string{"required": ""}}, nil},
 	} {
@@ -139,6 +191,40 @@ func TestPrepareAppliesPrefixBeforeValidation(t *testing.T) {
 	require.Error(t, err, "manual fields get no special treatment")
 	_, err = semantic.New(r).Prepare([]model.OptField{{FieldName: "x", OptionName: "a-b", Type: "int", DefaultOnly: true}})
 	require.NoError(t, err)
+}
+
+func TestPrepareRejectsDuplicateOptfnOptionNames(t *testing.T) {
+	t.Parallel()
+
+	fields := []model.OptField{
+		{FieldName: "first", OptionName: "Shared", Type: "string", SetterTarget: &model.SetterTarget{}},
+		{FieldName: "second", OptionName: "Shared", Type: "string", SetterTarget: &model.SetterTarget{}},
+	}
+	_, err := semantic.New(builtinRegistry(t)).Prepare(fields)
+	require.ErrorContains(t, err, `field second: duplicate option name "Shared" also used by field first`)
+}
+
+func TestPrepareRejectsDuplicateRegularAndOptfnOptionNames(t *testing.T) {
+	t.Parallel()
+
+	fields := []model.OptField{
+		{FieldName: "exact", OptionName: "Exact", Type: "string"},
+		{FieldName: "mapping", OptionName: "Exact", Type: "Mapping", SetterTarget: &model.SetterTarget{}},
+	}
+	_, err := semantic.New(builtinRegistry(t)).Prepare(fields)
+	require.ErrorContains(t, err, `duplicate option name "Exact"`)
+}
+
+func TestPrepareRejectsIncompatibleMinAndOneOfValues(t *testing.T) {
+	t.Parallel()
+
+	for _, field := range []model.OptField{
+		{FieldName: "count", Type: "int", IsNumeric: true, Checks: map[string]string{"min": "1.5"}},
+		{FieldName: "mode", Type: "int", IsNumeric: true, IsComparable: true, Checks: map[string]string{"oneof": `["off"]`}},
+	} {
+		_, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{field})
+		require.Error(t, err, "%s", field.FieldName)
+	}
 }
 
 // fakeCatalog serves fixed descriptors for default modifier policy tests.
@@ -192,6 +278,18 @@ func TestPrepareDefaultModifiers(t *testing.T) {
 			require.Equal(t, len(tt.want) > 0, prepared[0].HasModifiers)
 		})
 	}
+}
+
+func TestPrepareMapPutDoesNotApplyMapDefault(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{
+		{FieldName: "put", OptionName: "Put", Type: "map[string]uint8", IsMap: true, Metadata: map[string]string{"put": "true"}},
+		{FieldName: "set", OptionName: "Set", Type: "map[string]struct{}", IsMap: true, Metadata: map[string]string{"set": "true"}},
+	})
+	require.NoError(t, err)
+	require.Empty(t, prepared[0].Default)
+	require.Equal(t, "make(map[string]struct{})", prepared[1].Default)
 }
 
 func builtinRegistry(tb testing.TB) *plugin.Registry {
@@ -266,4 +364,67 @@ func TestPrepareResolvesMandatoryFromMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, prepared[0].Mandatory)
 	require.False(t, prepared[1].Mandatory)
+}
+
+func TestPrepareAllowsDuplicateOptionNameWhenOneFieldIsMandatory(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{
+		{FieldName: "required", OptionName: "Shared", Type: "int", Metadata: map[string]string{"mandatory": "true"}},
+		{FieldName: "optional", OptionName: "Shared", Type: "int"},
+	})
+	require.NoError(t, err)
+	require.True(t, prepared[0].Mandatory)
+}
+
+func TestPreparePrefixesDocsWithConfiguredFunctionPrefixes(t *testing.T) {
+	t.Parallel()
+
+	r := builtinRegistry(t)
+	for _, tc := range []struct{ name, prefix, doc, want string }{
+		{"custom", "Configure", "ConfigureName sets the name.", "ConfigureClientName sets the name."},
+		{"inverted", "Disable", "DisableName disables the name.", "DisableClientName disables the name."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			options := []semantic.Option{semantic.WithPrefix("Client")}
+			if tc.name == "custom" {
+				options = append(options, semantic.WithFuncPrefix(tc.prefix))
+			} else {
+				options = append(options, semantic.WithInvertFuncPrefix(tc.prefix))
+			}
+
+			prepared, err := semantic.New(r, options...).Prepare([]model.OptField{{FieldName: "name", OptionName: "Name", Type: "string", Doc: tc.doc}})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, prepared[0].Doc)
+		})
+	}
+}
+
+func TestPrepareDoesNotPrefixOrdinaryFieldDocumentation(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t), semantic.WithPrefix("Server")).Prepare([]model.OptField{{
+		FieldName: "timeout", OptionName: "Timeout", Type: "time.Duration", Doc: "Timeout in seconds.",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, "Timeout in seconds.", prepared[0].Doc)
+}
+
+func TestPrepareDoesNotRewriteOrdinaryDocWhoseFirstWordEndsInOptionName(t *testing.T) {
+	t.Parallel()
+	prepared, err := semantic.New(builtinRegistry(t), semantic.WithPrefix("Server")).Prepare([]model.OptField{{
+		FieldName: "port", OptionName: "Port", Type: "int", Doc: "DefaultPort is used when none is specified.",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, "DefaultPort is used when none is specified.", prepared[0].Doc)
+}
+
+func TestPrepareRejectsEmptyResets(t *testing.T) {
+	t.Parallel()
+
+	field := model.OptField{
+		FieldName: "x", OptionName: "X", Type: "int", Metadata: map[string]string{"resets": ""},
+	}
+	_, err := semantic.New(builtinRegistry(t)).Prepare([]model.OptField{field})
+	require.ErrorContains(t, err, "optgen resets requires non-empty field names")
 }

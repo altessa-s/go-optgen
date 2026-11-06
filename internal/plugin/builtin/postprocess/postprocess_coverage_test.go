@@ -67,8 +67,8 @@ func TestDedupModifier(t *testing.T) {
 	require.Empty(t, ctx.GetAdditionalImports(), "deduplication needs no imports")
 
 	res = m.Generate(newCtx(false), model.OptField{ElemType: "string"}, "deduped")
-	require.Equal(t, "deduped2 := make([]string, 0, len(deduped))", res.Code[0])
-	require.Equal(t, "deduped2", res.OutputVar, "the output name avoids the input's")
+	require.Equal(t, "dedupedArg := make([]string, 0, len(deduped))", res.Code[0])
+	require.Equal(t, "dedupedArg", res.OutputVar, "the output name avoids the input's")
 }
 
 func TestNonEmptyModifier(t *testing.T) {
@@ -144,4 +144,99 @@ func TestPositiveModifier(t *testing.T) {
 
 	res = m.Generate(newCtx(true), model.OptField{Type: "int", Modifiers: []string{"positive=allow_zero"}}, "n")
 	require.Equal(t, []string{"if n < 0 {", "  return nil", "}"}, res.Code)
+}
+
+func TestCloneModifierUsesPipelineOutputAndSupportsEagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	modifier := &postprocess.CloneModifier{}
+	field := model.OptField{Type: "[]net.IP", IsSlice: true, ElemType: "net.IP", Modifiers: []string{"clone=eager"}}
+	ctx := newCtx(false)
+	ctx.InputVar = "v"
+	result := modifier.Generate(ctx, field, "v")
+	require.Contains(t, result.PreClosureCode, "slices.Clone(v)")
+	require.Equal(t, []string{"slices"}, imports(ctx))
+
+	ctx = newCtx(false)
+	ctx.InputVar = "v"
+	result = modifier.Generate(ctx, field, "transformed")
+	require.Contains(t, result.PreClosureCode, "slices.Clone(v)")
+	require.Equal(t, []string{"slices"}, imports(ctx))
+
+	ctx = newCtx(false)
+	field.Modifiers = nil
+	result = modifier.Generate(ctx, field, "transformed")
+	require.Empty(t, result.Code)
+	require.Empty(t, ctx.GetAdditionalImports())
+}
+
+func TestCloneModifierRecognizesEagerModeWithoutCaseSensitivity(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.InputVar = "v"
+	field := model.OptField{Type: "[]string", IsSlice: true, Modifiers: []string{"Clone=EAGER"}}
+	result := (&postprocess.CloneModifier{}).Generate(ctx, field, "v")
+	require.Contains(t, result.PreClosureCode, "slices.Clone(v)")
+	require.Empty(t, result.Code)
+}
+
+func TestCloneModifierUsesConfiguredInputVariable(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.InputVar = "input"
+	result := (&postprocess.CloneModifier{}).Generate(ctx, model.OptField{Type: "[]string", IsSlice: true}, "input")
+	require.Equal(t, []string{"cloned := slices.Clone(input)"}, result.Code)
+	require.Equal(t, "cloned", result.OutputVar)
+}
+
+func TestDisabledCloneModifierDoesNotEmitEagerSnapshot(t *testing.T) {
+	t.Parallel()
+
+	registry := plugin.NewRegistry()
+	require.NoError(t, registry.Register(&postprocess.CloneModifier{}))
+	require.NoError(t, registry.DisablePlugins("Clone"))
+
+	field := model.OptField{Type: "[]string", IsSlice: true, ElemType: "string", Modifiers: []string{"clone=eager"}}
+	ctx := newCtx(false)
+	result := plugin.NewPipeline(registry).BuildPipeline(ctx, field, "v")
+	require.Empty(t, result.PreClosureCode)
+	require.Empty(t, ctx.GetAdditionalImports())
+}
+
+func imports(ctx plugin.GenerationContext) []string {
+	var paths []string
+	for _, imported := range ctx.GetAdditionalImports() {
+		paths = append(paths, imported.Path)
+	}
+
+	return paths
+}
+
+func TestCloneModifierChoosesFreeStdlibAlias(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.Imports = map[string]model.ImportInfo{"slices": {Path: "example.com/collections", Alias: "slices"}}
+	field := model.OptField{Type: "[]slices.Value", IsSlice: true, ElemType: "slices.Value"}
+	result := (&postprocess.CloneModifier{}).Generate(ctx, field, "v")
+	require.Equal(t, []string{"cloned := slices2.Clone(v)"}, result.Code)
+	require.Equal(t, []model.GeneratedImport{{Path: "slices", Alias: "slices2"}}, ctx.GetAdditionalImports())
+}
+
+func TestCollectionModifiersAvoidIdentifiersUsedByChecksAndResetTypes(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.StructFields = []model.StructField{{Name: "backup", Type: "deduped"}}
+	field := model.OptField{FieldName: "items", Type: "[]int", ElemType: "int", IsSlice: true,
+		Checks: map[string]string{"minlen": "cloned+seen+item"}, Metadata: map[string]string{"resets": "backup"}}
+	clone := (&postprocess.CloneModifier{}).Generate(ctx, field, "v")
+	require.Equal(t, "clonedArg", clone.OutputVar)
+
+	dedup := (&postprocess.DedupModifier{}).Generate(ctx, field, "v")
+	require.Equal(t, "dedupedArg", dedup.OutputVar)
+	require.Contains(t, dedup.Code[2], "seenArg := make(map[int]")
+	require.Contains(t, dedup.Code[3], "itemArg := range v")
 }

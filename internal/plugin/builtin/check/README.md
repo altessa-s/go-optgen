@@ -12,7 +12,8 @@ Package `check` implements value-validation plugins.
 |-----|---------|
 | `RequiredCheck / NonZeroCheck` | Presence and nonzero validation |
 | `MinLenCheck / MaxLenCheck` | Length bounds |
-| `OneOfCheck` | Allowed string expressions |
+| `OneOfCheck` | Allowed string values or identifiers on comparable fields |
+| `MinCheck` | Numeric and `time.Duration` lower bound |
 
 ## Usage
 
@@ -21,3 +22,7 @@ err := check.Register(registry)
 ```
 
 See [architecture](../../../../docs/architecture.md) for dependency rules and [plugin API](../../../../plugin/README.md) for extension contracts.
+
+`oneof` keeps unquoted values as string literals for the built-in `string` type. On other comparable fields, quoted values remain literals and
+unquoted values must be identifiers or qualified constants. `min` bounds are normalized through `DefaultNormalizer`, including duration values such as
+`1s`.

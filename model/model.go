@@ -13,20 +13,29 @@ import (
 // It is produced by the parser and consumed by [plugin.FieldPlugin] implementations to
 // generate the corresponding WithXxx option function.
 type OptField struct {
-	FieldName   string            // Original field name in the struct
-	OptionName  string            // Name for the WithXxx function
-	Type        string            // Field type as string representation
-	TypeImports []GeneratedImport // Imports referenced by the field type.
-	Default     string            // Default value expression
-	Doc         string            // Documentation comment from field
-	ElemType    string            // Element type for slices (without [])
-	Modifiers   []string          // Modifier names (e.g. ["upper"], ["trimspaces", "upper"])
-	Metadata    map[string]string // Additional metadata from tag (arbitrary key=value pairs)
-	BareChecks  map[string]bool   // Checks declared without a value.
-	Checks      map[string]string // Validation rules for option values (arbitrary key=value pairs)
-	IsSlice     bool              // Whether the field is a slice type
-	IsInterface bool              // Whether the field is an interface type
-	IsNilable   bool              // Whether the field type can be nil (pointer, slice, map, interface, chan, func)
+	FieldName          string            // Original field name in the struct
+	OptionName         string            // Name for the WithXxx function
+	Type               string            // Field type as string representation
+	TypeImports        []GeneratedImport // Imports referenced by the field type.
+	Default            string            // Default value expression
+	Doc                string            // Documentation comment from field
+	OptionDoc          string            // Complete documentation for this option from optgen:doc
+	HasOptionDoc       bool              // Whether OptionDoc was supplied, including an empty doc line
+	ElemType           string            // Element type for slices (without [])
+	Modifiers          []string          // Modifier names (e.g. ["upper"], ["trimspaces", "upper"])
+	Metadata           map[string]string // Additional metadata from tag (arbitrary key=value pairs)
+	BareChecks         map[string]bool   // Checks declared without a value.
+	Checks             map[string]string // Validation rules for option values (arbitrary key=value pairs)
+	CheckValueValid    map[string]bool   // Type-check results for constant bounds and case values
+	CheckValueIdentity map[string]string // Canonical values for resolved constant check expressions
+	IsSlice            bool              // Whether the field is a slice type
+	IsMap              bool              // Whether the field is a map type
+	MapKeyType         string            // Key type for maps
+	MapKeyString       bool              // Whether the map key's underlying type is string
+	MapValueType       string            // Value type for maps
+	MapValueNilable    bool              // Whether map values can be nil
+	IsInterface        bool              // Whether the field is an interface type
+	IsNilable          bool              // Whether the field type can be nil (pointer, slice, map, interface, chan, func)
 	// TypeResolved reports that type checking resolved the field type, so
 	// IsInterface, IsNilable, IsNumeric and IsComparable are exact rather
 	// than inferred from the syntax.
@@ -37,6 +46,37 @@ type OptField struct {
 	HasModifiers   bool // Whether the field has any modifiers
 	DefaultOnly    bool // If true, include in defaultOptions() but skip WithXxx generation
 	Mandatory      bool // optgen:"mandatory": a constructor parameter instead of a WithXxx option
+	SetterTarget   *SetterTarget
+}
+
+// StructField describes a field in the source options struct, including fields
+// that do not generate options.
+type StructField struct {
+	Name         string            // Declared field name
+	Type         string            // Source type expression
+	TypeImports  []GeneratedImport // Imports referenced by the source type
+	TypeResolved bool              // Whether type checking resolved the field type
+	IsBool       bool              // Whether the underlying type is bool
+	IsNumeric    bool              // Whether the underlying type is numeric
+	IsComparable bool              // Whether the field type is comparable
+	IsInterface  bool              // Whether the field type is an interface
+	IsNilable    bool              // Whether values of the field type can be nil
+}
+
+// SetterTarget describes a resolved optfn function or method.
+type SetterTarget struct {
+	Expression   string
+	Method       bool
+	Parameters   []FuncParameter
+	ReturnsError bool
+	Imports      []GeneratedImport
+}
+
+// FuncParameter is one parameter in an optfn target signature.
+type FuncParameter struct {
+	Name     string
+	Type     string
+	Variadic bool
 }
 
 // HasModifier reports whether modifier appears in the field's optval tag list.

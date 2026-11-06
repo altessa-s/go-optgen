@@ -19,6 +19,9 @@ package rather than any internal package to access the types they receive and pr
 | `ImportInfo`      | Resolved package import found in the source file being parsed                              |
 | `GeneratedImport` | Import to be rendered in the generated output file                                         |
 | `TypeParam`       | A single type parameter (`Name`, `Constraint`) of a generic option struct                   |
+| `SetterTarget` | Resolved function or method used by an `optfn` option, including its generated signature and imports |
+| `FuncParameter` | Parameter name, type, and variadic flag from a resolved target signature |
+| `StructField` | Source field declaration and resolved type facts, including fields omitted from option generation |
 
 ## OptField fields
 
@@ -31,11 +34,16 @@ package rather than any internal package to access the types they receive and pr
 | `TypeImports` | Typed import paths and aliases resolved by syntax extraction |
 | `BareChecks` | Check keys declared without an explicit value |
 | `Doc`          | Documentation comment from the field                                                          |
+| `OptionDoc` | Complete documentation for one generated option from `//optgen:doc`; populated per expanded option |
+| `HasOptionDoc` | Whether an explicit option doc was supplied, including an empty directive line |
 | `ElemType`     | Element type for slices (without `[]`)                                                        |
 | `Modifiers`    | Merged automatic and explicit `optval` modifiers, excluding disablers (e.g. `["trimspaces", "lower"]`)                         |
 | `Metadata`     | Flags and `key=value` pairs from the `optgen` tag (e.g. `append`, `notnil`)                   |
 | `Checks`       | Validation rules from the `optcheck` tag (e.g. `{"required":"", "minlen":"3"}`)               |
+| `CheckValueValid` | Type-check result for oneof constants and min bounds when source type information is available |
+| `CheckValueIdentity` | Canonical identity of resolved constant values, used to reject duplicate `oneof` cases |
 | `IsSlice`      | Whether the field is a slice type                                                             |
+| `IsMap`        | Whether the field is a map type; `MapKeyType`, `MapKeyString`, `MapValueType`, and `MapValueNilable` describe its entries |
 | `IsInterface`  | Whether the field is an interface type                                                        |
 | `IsNilable`    | Whether the field type can be nil (pointer, slice, map, interface, chan, func)                 |
 | `TypeResolved` | Type checking resolved the type, so the type facts are exact rather than inferred from syntax |
@@ -45,3 +53,8 @@ package rather than any internal package to access the types they receive and pr
 | `HasModifiers` | Whether the field has any modifiers                                                           |
 | `Mandatory`    | `optgen:"mandatory"`: a parameter of the generated constructor instead of a `WithXxx` option  |
 | `DefaultOnly`  | Include the field in `defaultOptions()` but skip `WithXxx` generation                         |
+| `SetterTarget` | Resolved target for an `optfn` setter; nil for ordinary field plugins |
+
+`SourcePackage` and `GenerateInput` also carry `StructFields`, which preserves the names, source type strings, imports, and resolved type facts for every
+field in the options struct, including fields skipped by `opt:"-"`. Semantic preparation uses these declarations to validate `enables` and `resets`.
+The source adapter keeps `go/token` and `go/types` state private and passes only resolved declarations and signature details through the model.

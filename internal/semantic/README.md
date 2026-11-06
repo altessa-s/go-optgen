@@ -10,12 +10,14 @@ request (`defaults-from=none`, `with-isset`).
 
 ## Options
 
-| Option            | Default | Purpose                                                      |
-|-------------------|---------|--------------------------------------------------------------|
-| `WithPrefix`      | `""`    | Prepended to every option name before validation             |
-| `WithWarningSink` | `nil`   | Receives diagnostics, such as a check of a disabled plugin   |
-| `WithExclude` | none | Drops fields whose name matches a `path.Match` pattern |
-| `WithDefaultModifiers` | `true` | Applies the modifiers plugins declare for a type (trimspaces, notnil, ...) |
+| Option                  | Default | Purpose                                                                     |
+|-------------------------|---------|-----------------------------------------------------------------------------|
+| `WithPrefix`            | `""`    | Prepended to every option name before validation                            |
+| `WithFuncPrefix`        | `""`    | Recognized while rewriting option docs for prefixed option names            |
+| `WithInvertFuncPrefix`  | `""`    | Recognized while rewriting docs for inverted option names                   |
+| `WithWarningSink`       | `nil`   | Receives diagnostics, such as a check of a disabled plugin                   |
+| `WithExclude`           | none    | Drops fields whose name matches a `path.Match` pattern                      |
+| `WithDefaultModifiers`  | `true`   | Applies the modifiers plugins declare for a type (trimspaces, notnil, ...)  |
 
 ## Key types
 

@@ -10,6 +10,7 @@ import "github.com/altessa-s/go-optgen/plugin"
 func Register(r *plugin.Registry) error {
 	return r.Register(
 		&DedupModifier{},
+		&CloneModifier{},
 		&NonEmptyModifier{},
 		&PositiveModifier{},
 	)

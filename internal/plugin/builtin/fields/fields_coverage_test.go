@@ -5,8 +5,11 @@
 package fields_test
 
 import (
+	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"strings"
 	"testing"
 
@@ -20,6 +23,86 @@ import (
 
 func newCtx(returnsErr bool) plugin.GenerationContext {
 	return plugin.NewGenerationContext("pkg", model.RenderSettings{TypeName: "options", OptionType: "Option", OptionReturnsError: returnsErr}, nil, nil, model.GenericInfo{})
+}
+
+func TestMapCollectionParametersDoNotShadowKeyTypes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		field model.OptField
+		gen   plugin.FieldPlugin
+		src   string
+	}{
+		{name: "put", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[key]int", IsMap: true, MapKeyType: "key", MapValueType: "int", Metadata: map[string]string{"put": "true"}}, gen: &fields.MapPutPlugin{}, src: "package sample\ntype key string\ntype options struct { entries map[key]int }\ntype Option func(*options)\n"},
+		{name: "put zero key name", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[zeroKey]int", IsMap: true, MapKeyType: "zeroKey", MapKeyString: true, MapValueType: "int", Metadata: map[string]string{"put": "true", "resets": "other"}}, gen: &fields.MapPutPlugin{}, src: "package sample\ntype zeroKey string\ntype options struct { entries map[zeroKey]int; other zeroKey }\ntype Option func(*options)\n"},
+		{name: "setter reset type name", field: model.OptField{FieldName: "mode", OptionName: "Mode", Type: "int", Metadata: map[string]string{"resets": "other"}}, gen: &fields.DefaultSetterPlugin{}, src: "package sample\ntype v int\ntype options struct { mode int; other v }\ntype Option func(*options)\n"},
+		{name: "set", field: model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[v]struct{}", IsMap: true, MapKeyType: "v", Metadata: map[string]string{"set": "true"}}, gen: &fields.MapSetPlugin{}, src: "package sample\ntype v string\ntype options struct { entries map[v]struct{} }\ntype Option func(*options)\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := newCtx(false)
+
+			switch tc.name {
+			case "put zero key name":
+				ctx.StructFields = []model.StructField{{Name: "other", Type: "zeroKey"}}
+			case "setter reset type name":
+				ctx.StructFields = []model.StructField{{Name: "other", Type: "v"}}
+			}
+
+			generated, err := tc.gen.Generate(ctx, tc.field, nil)
+			require.NoError(t, err)
+
+			if tc.name == "put zero key name" {
+				require.Contains(t, generated.Code, "new(zeroKey)")
+			}
+
+			fset := token.NewFileSet()
+			input, err := parser.ParseFile(fset, "input.go", tc.src, 0)
+			require.NoError(t, err)
+			output, err := parser.ParseFile(fset, "options_gen.go", "package sample\n"+generated.Code, 0)
+			require.NoError(t, err)
+			_, err = (&types.Config{Importer: importer.Default()}).Check("sample", fset, []*ast.File{input, output}, nil)
+			require.NoError(t, err, generated.Code)
+		})
+	}
+}
+
+func TestMapPutSkipsOnlyEmptyStringKeys(t *testing.T) {
+	t.Parallel()
+
+	plugin := &fields.MapPutPlugin{}
+
+	stringField := model.OptField{FieldName: "entries", OptionName: "Entries", Type: "map[string]int", IsMap: true, MapKeyString: true,
+		MapKeyType: "string", MapValueType: "int", Metadata: map[string]string{"put": "true"}}
+	stringCode, err := plugin.Generate(newCtx(false), stringField, nil)
+	require.NoError(t, err)
+	require.Contains(t, stringCode.Code, "var zeroKey string")
+	require.Contains(t, stringCode.Code, "if key == zeroKey { return }")
+
+	namedStringField := stringField
+	namedStringField.Type = "map[key]int"
+	namedStringField.MapKeyType = "key"
+	namedStringField.MapKeyString = true
+	namedStringCode, err := plugin.Generate(newCtx(false), namedStringField, nil)
+	require.NoError(t, err)
+	require.Contains(t, namedStringCode.Code, "var zeroKey key")
+
+	for _, keyType := range []string{"int", "bool", "*int"} {
+		t.Run(keyType, func(t *testing.T) {
+			t.Parallel()
+
+			field := stringField
+			field.Type = "map[" + keyType + "]int"
+			field.MapKeyType = keyType
+			field.MapKeyString = false
+			generated, err := plugin.Generate(newCtx(false), field, nil)
+			require.NoError(t, err)
+			require.NotContains(t, generated.Code, "zeroKey")
+			require.NotContains(t, generated.Code, `== ""`)
+		})
+	}
 }
 
 func genericCtx() plugin.GenerationContext {
@@ -192,6 +275,23 @@ func TestNetIPParsePlugin(t *testing.T) {
 
 		for _, imp := range ctx.GetAdditionalImports() {
 			require.NotEqual(t, "fmt", imp.Path)
+		}
+	})
+
+	t.Run("clone skips the already allocated parse result", func(t *testing.T) {
+		t.Parallel()
+
+		f := base
+		f.Metadata = map[string]string{"parseip": "true"}
+		f.Modifiers = []string{"clone"}
+		f.HasModifiers = true
+		ctx := newCtx(false)
+		code, err := p.Generate(ctx, f, plugin.NewPipeline(testRegistry()))
+		require.NoError(t, err)
+		require.NotContains(t, code.Code, "slices.Clone")
+
+		for _, imp := range ctx.GetAdditionalImports() {
+			require.NotEqual(t, "slices", imp.Path)
 		}
 	})
 }

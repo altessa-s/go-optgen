@@ -8,13 +8,44 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/altessa-s/go-optgen/internal/plugin/builtin"
+	"github.com/altessa-s/go-optgen/internal/semantic"
 	"github.com/altessa-s/go-optgen/internal/source"
 	"github.com/altessa-s/go-optgen/model"
+	"github.com/altessa-s/go-optgen/plugin"
 )
+
+func TestReader_OptfnInvalidDeclarations(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ name, declaration, want string }{
+		{"unresolved target", `type options struct { value string ` + "`optfn:\"Value=missing\"`" + ` }`, "field value option Value target missing"},
+		{"uninstantiated generic", `func makeValue[T any](v T) T { return v }; type options struct { value string ` + "`optfn:\"Value=makeValue\"`" + ` }`, "generic target must be explicitly instantiated"},
+		{"nonassignable result", `func makeValue(v int) int { return v }; type options struct { value string ` + "`optfn:\"Value=makeValue\"`" + ` }`, "result is not assignable to field type"},
+		{"skip conflict", `type options struct { value string ` + "`opt:\"-\" optfn:\"Value=makeValue\"`" + ` }`, `opt:"-" cannot be combined with optfn`},
+		{"optval conflict", `type options struct { value string ` + "`optfn:\"Value=makeValue\" optval:\"lower\"`" + ` }`, "optfn cannot be combined with optval"},
+		{"optcheck conflict", `type options struct { value string ` + "`optfn:\"Value=makeValue\" optcheck:\"required\"`" + ` }`, "optfn cannot be combined with optcheck"},
+		{"notnil conflict", `type options struct { value string ` + "`optfn:\"Value=makeValue\" optgen:\"notnil\"`" + ` }`, `optfn cannot be combined with optgen modifier "notnil"`},
+		{"duplicate target option", `func makeValue(v string) string { return v }; type options struct { value string ` + "`optfn:\"Value=makeValue, Value=makeValue\"`" + ` }`, `duplicate optfn option name "Value"`},
+		{"empty optfn", `type options struct { value string ` + "`optfn:\"\"`" + ` }`, "optfn requires at least one Name=Target entry"},
+		{"optfn multi-name field", `func makeValue(v string) string { return v }; type options struct { first, second string ` + "`optfn:\"Value=makeValue\"`" + ` }`, "optfn cannot be used with multiple field names"},
+		{"optfn explicit option name", `func makeValue(v string) string { return v }; type options struct { value string ` + "`opt:\"Custom\" optfn:\"Setter=makeValue\"`" + ` }`, "optfn cannot be combined with opt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module optfn.invalid\n\ngo 1.26\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\n"+tc.declaration+"\n"), 0o644))
+			_, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
 
 func TestReaderExcludesTestsAndGeneratedFiles(t *testing.T) {
 	t.Parallel()
@@ -130,4 +161,258 @@ func TestReaderLeavesTypeParametersUnresolved(t *testing.T) {
 	require.False(t, byName["bad"].TypeResolved, "undefined types stay unresolved")
 	require.True(t, byName["c"].TypeResolved)
 	require.False(t, byName["c"].IsNumeric, "complex numbers are not ordered")
+}
+
+func TestReaderMapValueTypeParameterIsNotNilable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\ntype options[V any] struct { entries map[string]V `optgen:\"put\"` }\n"), 0o600))
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.False(t, packages[0].Fields[0].MapValueNilable)
+}
+
+func TestReaderRejectsUnresolvedTypesNestedInSetterParameters(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+
+	src := "package sample\ntype Result struct{}\nfunc makeResult(opts ...Missing) Result { return Result{} }\ntype options struct { result Result `optfn:\"Result=makeResult\"` }\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte(src), 0o600))
+
+	_, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.ErrorContains(t, err, "target signature contains an unresolved type")
+}
+
+func TestReaderResolvesOptfnImportsFromSelectorsAndGenericArguments(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":               "module sample\n\ngo 1.26\n",
+		"options.go":           "package sample\nimport codeclib \"sample/codec\"\nimport \"sample/v3\"\nimport \"sample/go-codec/v9\"\ntype Box[T any] struct{ value T }\nfunc makeBox[T any](id string) Box[T] { return Box[T]{} }\ntype options struct { result codeclib.Result `optfn:\"Result=codeclib.Parse\"`; generic Box[yaml.Item] `optfn:\"Generic=makeBox[yaml.Item]\"`; token redis.Token `optfn:\"Token=redis.NewToken\"` }\n",
+		"codec/codec.go":       "package codec\ntype Result struct{}\nfunc Parse(codec string) Result { return Result{} }\n",
+		"go-codec/v9/codec.go": "package redis\ntype Token struct{}\nfunc NewToken(options codecOption) Token { return Token{} }\ntype codecOption string\n",
+		"v3/yaml.go":           "package yaml\ntype Item struct{}\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	byOption := make(map[string]model.SetterTarget)
+	for _, field := range packages[0].Fields {
+		byOption[field.OptionName] = *field.SetterTarget
+	}
+
+	for _, name := range []string{"Result", "Generic", "Token"} {
+		require.NotEmpty(t, byOption[name].Imports, name)
+	}
+
+	require.Equal(t, []model.GeneratedImport{{Path: "sample/go-codec/v9", Alias: "redis"}}, byOption["Token"].Imports)
+}
+
+func TestReaderResolvesDotImportedOptfnTargetImport(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":           "module sample\n\ngo 1.26\n",
+		"options.go":       "package sample\nimport . \"sample/policy\"\ntype options struct { mapping Mapping `optfn:\"Mapping=NewMapping\"` }\n",
+		"policy/policy.go": "package policy\ntype Mapping struct{}\nfunc NewMapping(key string) Mapping { return Mapping{} }\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	target := packages[0].Fields[0].SetterTarget
+	require.Equal(t, "policy.NewMapping", target.Expression)
+	require.Equal(t, []model.GeneratedImport{{Path: "sample/policy"}}, target.Imports)
+}
+
+func TestReaderResolvesCheckConstantsFromGeneratedFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":      "module sample\n\ngo 1.26\n",
+		"options.go":  "package sample\ntype options struct { mode GeneratedMode `optcheck:\"oneof=[ModeA, ModeB]\"` }\n",
+		"mode_gen.go": "// Code generated by optgen. DO NOT EDIT.\n\npackage sample\ntype GeneratedMode string\nconst (ModeA GeneratedMode = \"a\"; ModeB GeneratedMode = \"b\")\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"ModeA": true, "ModeB": true}, packages[0].Fields[0].CheckValueValid)
+}
+
+func TestReaderResolvesOptfnFromDotImport(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":           "module sample\n\ngo 1.26\n",
+		"options.go":       "package sample\nimport . \"sample/custom\"\ntype options struct { policy Policy `optfn:\"Policy=New[Item]\"` }\n",
+		"other.go":         "package sample\nimport \"errors\"\nvar _ = errors.New(\"x\")\n",
+		"custom/custom.go": "package custom\ntype Policy int\ntype Item string\nfunc New[T any](T) Policy { return 0 }\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.Len(t, packages[0].Fields, 1)
+	target := packages[0].Fields[0].SetterTarget
+	require.NotNil(t, target)
+	require.Equal(t, "custom.New[custom.Item]", target.Expression)
+	require.Equal(t, []model.GeneratedImport{{Path: "sample/custom"}}, target.Imports)
+}
+
+func TestReaderResolvesDottedImportPackageName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":          "module sample\n\ngo 1.26\n",
+		"options.go":      "package sample\nimport \"sample/yaml.v3\"\ntype options struct { value yaml.Node `optgen:\"default=yaml.Node{}\"` }\n",
+		"yaml.v3/yaml.go": "package yaml\ntype Node struct{}\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.Equal(t, "sample/yaml.v3", packages[0].Imports["yaml"].Path)
+}
+
+func TestReaderResolvesCheckConstantsAndCompatibility(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":     "module sample\n\ngo 1.26\n",
+		"options.go": "package sample\ntype Mode string\nconst FailOpen Mode = \"open\"\nvar FailClosed Mode\ntype options struct { count int `optcheck:\"min=1.5\"`; mode Mode `optcheck:\"oneof=[FailOpen,FailClosed]\"` }\n",
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	byField := make(map[string]model.OptField)
+	for _, field := range packages[0].Fields {
+		byField[field.FieldName] = field
+	}
+
+	require.False(t, byField["count"].CheckValueValid["1.5"])
+	require.True(t, byField["mode"].CheckValueValid["FailOpen"])
+	require.False(t, byField["mode"].CheckValueValid["FailClosed"])
+}
+
+func TestReaderRejectsIntegerCheckConstantsOutsideFieldRange(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\ntype options struct { retries uint8 `optcheck:\"min=-1\"`; port uint16 `optcheck:\"oneof=[80, 70000]\"` }\n"), 0o600))
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	byName := make(map[string]model.OptField)
+	for _, field := range packages[0].Fields {
+		byName[field.FieldName] = field
+	}
+
+	require.False(t, byName["retries"].CheckValueValid["-1"])
+	require.True(t, byName["port"].CheckValueValid["80"])
+	require.False(t, byName["port"].CheckValueValid["70000"])
+}
+
+func TestReaderRejectsOneOfConstantsWithDuplicateValues(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\ntype Mode string\nconst (Open Mode = \"open\"; AliasOpen Mode = Open)\ntype options struct { mode Mode `optcheck:\"oneof=[Open, AliasOpen]\"` }\n"), 0o600))
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	registry := plugin.NewRegistry()
+	require.NoError(t, builtin.Register(registry))
+	_, err = semantic.New(registry).Prepare(packages[0].Fields)
+	require.ErrorIs(t, err, plugin.ErrInvalidCheckValue)
+}
+
+func TestReaderResolvesCheckFactsForCaseInsensitiveKeys(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+
+	src := "package sample\ntype Mode string\nvar InvalidMode Mode\ntype options struct { mode Mode `optcheck:\"OneOf=[InvalidMode]\"` }\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte(src), 0o600))
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"InvalidMode": false}, packages[0].Fields[0].CheckValueValid)
+
+	registry := plugin.NewRegistry()
+	require.NoError(t, builtin.Register(registry))
+	_, err = semantic.New(registry).Prepare(packages[0].Fields)
+	require.ErrorContains(t, err, `oneof item "InvalidMode" must be a compatible constant`)
+}
+
+func TestReaderDurationCheckBoundsNormalizeAfterTypedLoading(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":     "module sample\n\ngo 1.26\n",
+		"options.go": "package sample\nimport clock \"time\"\ntype options struct { one clock.Duration `optcheck:\"min=1s\"`; zero clock.Duration `optcheck:\"min=0s\"`; nanos clock.Duration `optcheck:\"min=100ns\"` }\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	registry := plugin.NewRegistry()
+	require.NoError(t, builtin.Register(registry))
+	prepared, err := semantic.New(registry).Prepare(packages[0].Fields)
+	require.NoError(t, err)
+
+	checks := make(map[string]string, len(prepared))
+	for _, field := range prepared {
+		checks[field.FieldName] = field.Checks["min"]
+	}
+
+	require.Equal(t, map[string]string{"one": "1 * clock.Second", "zero": "0 * clock.Hour", "nanos": "clock.Duration(100)"}, checks)
+}
+
+func TestSourcePackageDoesNotExposeTypeCheckerState(t *testing.T) {
+	t.Parallel()
+
+	typeOfPackage := reflect.TypeFor[model.SourcePackage]()
+	_, hasFset := typeOfPackage.FieldByName("Fset")
+	_, hasTypes := typeOfPackage.FieldByName("Types")
+
+	require.False(t, hasFset)
+	require.False(t, hasTypes)
 }

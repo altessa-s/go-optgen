@@ -35,15 +35,18 @@ func NewPipeline(plugins ValuePlugins) *Executor { return &Executor{plugins: plu
 // Final stops code generation; conditional runtime guards must leave it false.
 func (r *Executor) BuildPipeline(ctx GenerationContext, field model.OptField, inputVar string) PipelineResult {
 	mods := r.plugins.CollectModifiers(field)
+	ctx.InputVar = inputVar
 
 	var lines []string
 
+	var preClosure strings.Builder
+
 	value := inputVar
 	finish := func(final bool) PipelineResult {
-		return PipelineResult{Code: strings.Join(lines, "\n"), ValueVar: value, EarlyReturn: final}
+		return PipelineResult{Code: strings.Join(lines, "\n"), ValueVar: value, PreClosureCode: preClosure.String(), EarlyReturn: final}
 	}
 
-	for _, phase := range []Phase{PhaseGuard, PhaseTransform, PhasePostProcess, PhaseCheck} {
+	for _, phase := range []Phase{PhaseGuard, PhaseTransform, PhasePostProcess, PhaseCheck, PhaseClone} {
 		if phase == PhaseTransform {
 			result := r.transformValue(ctx, field, value)
 			lines = append(lines, result.Code...)
@@ -56,6 +59,8 @@ func (r *Executor) BuildPipeline(ctx GenerationContext, field model.OptField, in
 			}
 
 			result := mod.Generate(ctx, field, value)
+			preClosure.WriteString(result.PreClosureCode)
+
 			if result.Final {
 				lines = append(lines, "_ = "+value)
 			}
@@ -145,7 +150,9 @@ func (r *Executor) checkValue(ctx GenerationContext, field model.OptField, value
 
 	lines := make([]string, 0, 3*len(checks))
 	for _, c := range checks {
-		lines = append(lines, c.plugin.Generate(ctx, field, value, field.Checks[c.key])...)
+		checkCtx := ctx
+		checkCtx.OnFailSkip = field.Metadata["onfail"] == "skip"
+		lines = append(lines, c.plugin.Generate(checkCtx, field, value, field.Checks[c.key])...)
 	}
 
 	return lines

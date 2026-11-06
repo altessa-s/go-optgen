@@ -46,37 +46,38 @@ func (p *NetIPParsePlugin) CanHandle(field model.OptField) bool {
 }
 
 var netIPParseTemplate = fieldtmpl.Must("net-ip-parse",
-	`// {{.FuncPrefix}}{{.OptionName}} {{if .Append}}appends to{{else}}sets{{end}} the {{.FieldName}} option.{{.DocComment}}
-func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v ...string) {{.OptionType}}{{.TypeParamsNames}} {
+	`{{template "optionDoc" .}}
+func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.ParamVar}} ...string) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
-		netIPs := make([]net.IP, 0, len(v))
-		for _, s := range v {
-			ip := net.ParseIP(s)
-			if ip == nil {
+		{{.InputVar}} := make([]{{.NetPackage}}.IP, 0, len({{.ParamVar}}))
+		for _, {{.RangeVar}} := range {{.ParamVar}} {
+			{{.IPVar}} := {{.NetPackage}}.ParseIP({{.RangeVar}})
+			if {{.IPVar}} == nil {
 				{{- if .OptionReturnsError}}
 				return {{.ErrExpr}}
 				{{- else}}
 				return
 				{{- end}}
 			}
-			netIPs = append(netIPs, ip)
+			{{.InputVar}} = append({{.InputVar}}, {{.IPVar}})
 		}
 {{.PipelineCode}}{{if not .Final}}		{{- if .Append}}
 		{{.MarkSet}}o.{{.FieldName}} = append(o.{{.FieldName}}, {{.ValueExpr}}...)
 		{{- else}}
 		{{.MarkSet}}o.{{.FieldName}} = {{.ValueExpr}}
 		{{- end}}
-{{- end}}{{- template "optionReturn" . }}
+		{{- if .PostAssignment}}{{.PostAssignment}}{{- end}}{{- end}}{{- template "optionReturn" . }}
 	}
 }`)
 
 // Generate renders the option function for field.
 func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
-	ctx.AddImport("net")
+	netPackage := ctx.AddStdlibImport("net", "net")
 
 	appendMode := plugin.IsTruthyMetadata(field.Metadata, "append")
+	ctx.InputIsNewCollection = true
 
-	errExpr := `fmt.Errorf("invalid IP %q", s)`
+	errExpr := ""
 
 	if v, ok := field.Metadata["err"]; ok {
 		v = strings.TrimSpace(v)
@@ -86,18 +87,41 @@ func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	}
 
 	if ctx.OptionReturnsError && strings.HasPrefix(errExpr, "fmt.") {
-		ctx.AddImport("fmt")
+		_ = ctx.AddStdlibImport("fmt", "fmt")
 	}
 
 	data := struct {
 		fieldtmpl.Data
-		Append  bool
-		ErrExpr string
+		Append     bool
+		ErrExpr    string
+		ParamVar   string
+		RangeVar   string
+		IPVar      string
+		NetPackage string
 	}{
-		Data:    fieldtmpl.NewData(ctx, field, values, "netIPs"),
-		Append:  appendMode,
-		ErrExpr: errExpr,
+		Data:   fieldtmpl.NewData(ctx, field, values, "netIPs"),
+		Append: appendMode,
+	}
+	used := fieldtmpl.ParameterIdentifiers(ctx, field, data.PostAssignment, field.Type, field.ElemType)
+	data.ParamVar = fieldtmpl.UniqueParameterName("v", used)
+	used[data.ParamVar] = true
+	data.RangeVar = fieldtmpl.UniqueParameterName("s", used)
+	used[data.RangeVar] = true
+	data.IPVar = fieldtmpl.UniqueParameterName("ip", used)
+
+	if errExpr == "" {
+		if ctx.OptionReturnsError {
+			fmtPackage := ctx.AddStdlibImport("fmt", "fmt")
+			errExpr = fmtPackage + `.Errorf("invalid IP %q", ` + data.RangeVar + ")"
+		}
 	}
 
-	return fieldtmpl.Execute(netIPParseTemplate, data)
+	data.NetPackage = netPackage
+
+	data.ErrExpr = errExpr
+	if appendMode {
+		data.DocSummary = "appends to the " + field.FieldName + " option."
+	}
+
+	return fieldtmpl.Execute(netIPParseTemplate, &data)
 }

@@ -88,6 +88,8 @@ func sourceImports(
 	fields []model.OptField,
 	localImports map[string]model.ImportInfo,
 	needsTypeImports map[string]bool,
+	needsCheckImports map[string]bool,
+	needsErrorImports map[string]bool,
 ) []model.GeneratedImport {
 	imports := make(importSet)
 	importByName := indexImportsByName(localImports)
@@ -95,7 +97,7 @@ func sourceImports(
 	for _, field := range fields {
 		// Only include imports for the field type if the generated code references the type
 		// (e.g., WithXxx parameter types) or if defaultOptions will reference a non-empty default.
-		if needsTypeImports[field.FieldName] || field.Default != "" {
+		if needsTypeImports[field.FieldName] {
 			for _, imp := range field.TypeImports {
 				imports.add(imp.Path, imp.Alias)
 			}
@@ -103,15 +105,33 @@ func sourceImports(
 
 		// Extract package prefixes from default expression and add their imports
 		if field.Default != "" {
-			for _, prefix := range extractPackagePrefixes(field.Default) {
-				if imp, ok := importByName[prefix]; ok {
-					imports.add(imp.Path, imp.Alias)
+			addExpressionImports(imports, importByName, field.Default)
+		}
+
+		if needsCheckImports[field.FieldName] {
+			for key, value := range field.Checks {
+				if field.Type == "string" && strings.EqualFold(key, "oneof") {
+					continue
 				}
+
+				addExpressionImports(imports, importByName, value)
 			}
+		}
+
+		if value := field.Metadata["err"]; needsErrorImports[field.FieldName] && value != "" {
+			addExpressionImports(imports, importByName, value)
 		}
 	}
 
 	return imports.sorted()
+}
+
+func addExpressionImports(imports importSet, importByName map[string]model.ImportInfo, expression string) {
+	for _, prefix := range extractPackagePrefixes(expression) {
+		if imp, ok := importByName[prefix]; ok {
+			imports.add(imp.Path, imp.Alias)
+		}
+	}
 }
 
 // importSet collects generated imports by path.

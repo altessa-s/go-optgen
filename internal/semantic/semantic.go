@@ -34,6 +34,10 @@ type Preparer struct {
 	options *options
 }
 
+const metadataTrue = "true"
+const timePackagePath = "time"
+const timePackageName = "time"
+
 // New binds the required catalog to a semantic preparer.
 func New(catalog Catalog, opts ...Option) *Preparer {
 	return &Preparer{catalog: catalog, options: newOptions(opts...)}
@@ -43,7 +47,14 @@ func New(catalog Catalog, opts ...Option) *Preparer {
 // carry the configured prefix, checks of disabled plugins are dropped with a
 // warning, and type defaults and default modifiers are resolved.
 func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
+	for _, field := range fields {
+		if err := validateFieldMetadata(field); err != nil {
+			return nil, err
+		}
+	}
+
 	out := slices.DeleteFunc(slices.Clone(fields), p.excluded)
+	optionNames := make(map[string]string, len(out))
 
 	policy := newModifierPolicy(p.catalog.Descriptors())
 	if !p.options.defaultModifiers {
@@ -56,21 +67,45 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 			p.warn(fmt.Sprintf("field %s is exported; keep option fields unexported so callers configure through options", f.FieldName))
 		}
 
-		f.OptionName = p.options.prefix + f.OptionName
-
+		optionName := f.OptionName
 		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
+
+		f.OptionName = p.options.prefix + optionName
+		prefixOptionDocumentation(f, optionName, f.OptionName, p.options.prefix, p.options.funcPrefix, p.options.invertFuncPrefix)
+
+		if f.Metadata["manual"] != metadataTrue && !f.Mandatory && !f.DefaultOnly && f.OptionName != "" {
+			if previous, exists := optionNames[f.OptionName]; exists {
+				return nil, fmt.Errorf("field %s: duplicate option name %q also used by field %s", f.FieldName, f.OptionName, previous)
+			}
+
+			optionNames[f.OptionName] = f.FieldName
+		}
+
 		if !f.DefaultOnly && f.OptionName != "" && !token.IsIdentifier(f.OptionName) {
 			return nil, fmt.Errorf("field %s: invalid option name %q", f.FieldName, f.OptionName)
+		}
+
+		if f.SetterTarget != nil {
+			if f.Default == "" {
+				f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
+			} else {
+				f.Default = p.normalizeDefault(*f, f.Default)
+			}
+
+			f.Modifiers = nil
+			f.HasModifiers = false
+
+			continue
 		}
 
 		if err := p.prepareChecks(f); err != nil {
 			return nil, err
 		}
 
-		if f.Default == "" {
+		if f.Default == "" && f.Metadata["put"] != "true" {
 			f.Default = p.catalog.FindTypeDefaultPlugin(f.Type)
-		} else {
-			f.Default = p.catalog.NormalizeDefault(f.Type, f.Default)
+		} else if f.Default != "" {
+			f.Default = p.normalizeDefault(*f, f.Default)
 		}
 
 		f.Modifiers = policy.modifiers(*f)
@@ -80,6 +115,48 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 	return out, nil
 }
 
+func prefixOptionDocumentation(field *model.OptField, oldName, newName, prefix string, functionPrefixes ...string) {
+	if prefix == "" {
+		return
+	}
+
+	if field.HasOptionDoc {
+		field.OptionDoc = prefixOptionDoc(field.OptionDoc, oldName, newName, functionPrefixes...)
+		return
+	}
+
+	if field.Metadata["multiopt"] != metadataTrue {
+		field.Doc = prefixOptionDoc(field.Doc, oldName, newName, functionPrefixes...)
+	}
+}
+
+func prefixOptionDoc(doc, oldName, newName string, functionPrefixes ...string) string {
+	boundary := strings.IndexFunc(doc, unicode.IsSpace)
+	if boundary <= 0 {
+		return doc
+	}
+
+	functionName := doc[:boundary]
+	if strings.HasSuffix(functionName, newName) || !strings.HasSuffix(functionName, oldName) {
+		return doc
+	}
+
+	funcPrefix := strings.TrimSuffix(functionName, oldName)
+	knownPrefixes := []string{"With", "Without", "Set"}
+
+	for _, prefix := range functionPrefixes {
+		if prefix != "" {
+			knownPrefixes = append(knownPrefixes, prefix)
+		}
+	}
+
+	if !slices.Contains(knownPrefixes, funcPrefix) {
+		return doc
+	}
+
+	return funcPrefix + newName + doc[boundary:]
+}
+
 // maxIsSetFields is the capacity of the uint64 field set behind WithIsSet.
 const maxIsSetFields = 64
 
@@ -87,6 +164,10 @@ const maxIsSetFields = 64
 // settings' policies: [model.DefaultsFromNone] drops every default, and
 // WithIsSet requires a FieldSet field and at most 64 fields.
 func (p *Preparer) PrepareInput(in model.GenerateInput) (model.GenerateInput, error) {
+	if err := validateFieldRelations(in.Fields, in.StructFields); err != nil {
+		return model.GenerateInput{}, err
+	}
+
 	fields, err := p.Prepare(in.Fields)
 	if err != nil {
 		return model.GenerateInput{}, err
@@ -135,6 +216,20 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 		}
 
 		value := f.Checks[key]
+
+		canonicalKey := spec.Key
+		if canonicalKey == "" {
+			canonicalKey = strings.ToLower(key)
+		}
+
+		delete(checks, key)
+
+		if strings.EqualFold(key, "min") {
+			value = p.normalizeDefault(*f, value)
+		}
+
+		checks[canonicalKey] = value
+
 		if spec.RequiresValue && (f.BareChecks[key] || strings.TrimSpace(value) == "") {
 			return fmt.Errorf("field %s: optcheck %s requires a value", f.FieldName, key)
 		}
@@ -149,10 +244,134 @@ func (p *Preparer) prepareChecks(f *model.OptField) error {
 	return nil
 }
 
+func (p *Preparer) normalizeDefault(field model.OptField, value string) string {
+	typeName := field.Type
+	if strings.HasSuffix(typeName, ".Duration") {
+		for _, imp := range field.TypeImports {
+			if imp.Path == timePackagePath {
+				typeName = timePackageName + ".Duration"
+				break
+			}
+		}
+	}
+
+	return rewriteTimeAlias(p.catalog.NormalizeDefault(typeName, value), field.TypeImports)
+}
+
+func rewriteTimeAlias(expression string, imports []model.GeneratedImport) string {
+	for _, imp := range imports {
+		if imp.Path != timePackagePath {
+			continue
+		}
+
+		alias := imp.Alias
+		if alias == "" {
+			alias = timePackageName
+		}
+
+		if alias != timePackageName {
+			expression = strings.ReplaceAll(expression, timePackageName+".", alias+".")
+		}
+
+		break
+	}
+
+	return expression
+}
+
 func (p *Preparer) warn(msg string) {
 	if p.options.warningSink != nil {
 		p.options.warningSink(msg)
 	}
+}
+
+func validateFieldRelations(fields []model.OptField, structFields []model.StructField) error {
+	byName := make(map[string]model.StructField, len(structFields))
+	for _, field := range structFields {
+		byName[field.Name] = field
+	}
+
+	for _, field := range fields {
+		if err := validateFieldRelationsForOne(field, byName); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateFieldRelationsForOne(field model.OptField, byName map[string]model.StructField) error {
+	if err := validateFieldMetadata(field); err != nil {
+		return err
+	}
+
+	enables := strings.TrimSpace(field.Metadata["enables"])
+
+	resets := splitResetFields(field.Metadata["resets"])
+	if enables != "" && slices.Contains(resets, enables) {
+		return fmt.Errorf("field %s: optgen field %s cannot be both enabled and reset", field.FieldName, enables)
+	}
+
+	for _, target := range append(slices.Clone(resets), enables) {
+		if target == "" {
+			continue
+		}
+
+		if err := validateFieldRelationTarget(field, target, enables, byName); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateFieldMetadata(field model.OptField) error {
+	if value, exists := field.Metadata["onfail"]; exists && value != "skip" {
+		return fmt.Errorf("field %s: optgen onfail value %q is invalid (want skip)", field.FieldName, value)
+	}
+
+	enables := strings.TrimSpace(field.Metadata["enables"])
+
+	resets := splitResetFields(field.Metadata["resets"])
+	if _, exists := field.Metadata["enables"]; exists && enables == "" {
+		return fmt.Errorf("field %s: optgen enables requires a field name", field.FieldName)
+	}
+
+	if _, exists := field.Metadata["resets"]; exists && (len(resets) == 0 || slices.Contains(resets, "")) {
+		return fmt.Errorf("field %s: optgen resets requires non-empty field names", field.FieldName)
+	}
+
+	return nil
+}
+
+func validateFieldRelationTarget(field model.OptField, target, enables string, byName map[string]model.StructField) error {
+	if target == field.FieldName {
+		return fmt.Errorf("field %s: optgen cannot enable or reset itself", field.FieldName)
+	}
+
+	fact, ok := byName[target]
+	if !ok {
+		return fmt.Errorf("field %s: optgen target %s does not exist", field.FieldName, target)
+	}
+
+	if target == enables && fact.Type != "bool" && !fact.IsBool {
+		return fmt.Errorf("field %s: optgen enables target %s must be bool", field.FieldName, target)
+	}
+
+	return nil
+}
+
+func splitResetFields(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, "|")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+
+	return parts
 }
 
 // modifierPolicy resolves the modifiers that transform and modifier plugins
@@ -192,6 +411,10 @@ func (p modifierPolicy) modifiers(f model.OptField) []string {
 	existing := slices.Clone(f.Modifiers)
 	for key := range f.Metadata {
 		existing = append(existing, key)
+	}
+
+	if _, hasMin := f.Checks["min"]; hasMin {
+		existing = append(existing, "positive")
 	}
 
 	var defaults []string

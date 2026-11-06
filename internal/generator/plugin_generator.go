@@ -24,6 +24,7 @@ import (
 func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	ctx := plugin.NewGenerationContext(in.PackageName, in.RenderSettings, in.Fields, in.Imports, in.GenericInfo)
 	ctx.IsSetField = in.IsSetField
+	ctx.StructFields = in.StructFields
 
 	type funcOut struct {
 		fieldName  string
@@ -40,6 +41,7 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	)
 
 	needsTypeImports := make(map[string]bool, len(in.Fields))
+	emittedOptions := make(map[string]bool, len(in.Fields))
 
 	addImport := func(imp model.GeneratedImport) {
 		if imp.Path == "" {
@@ -69,13 +71,18 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 			optionName: field.OptionName,
 			code:       result.Code,
 		})
+		emittedOptions[field.FieldName] = emittedOptions[field.FieldName] || strings.TrimSpace(result.Code) != ""
 		// Mandatory fields have no option but appear in the constructor signature.
-		needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
+		if field.SetterTarget == nil {
+			needsTypeImports[field.FieldName] = strings.TrimSpace(result.Code) != "" || field.Mandatory
+		}
+
 		typeDefs = append(typeDefs, result.TypeDefs...)
 		helpers = append(helpers, result.Helpers...)
 	}
 
 	validation := g.validationCode(ctx, in)
+	defaultFields := fieldsForDefaults(in.Fields)
 
 	for _, imp := range ctx.GetAdditionalImports() {
 		addImport(imp)
@@ -89,7 +96,15 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		}
 	}
 
-	requiredImports := sourceImports(fieldsForImports, in.Imports, needsTypeImports)
+	needsCheckImports := make(map[string]bool, len(in.Fields))
+
+	needsErrorImports := make(map[string]bool, len(in.Fields))
+	for _, field := range in.Fields {
+		needsCheckImports[field.FieldName] = emittedOptions[field.FieldName] || in.Validate
+		needsErrorImports[field.FieldName] = emittedOptions[field.FieldName] && in.OptionReturnsError && field.Metadata["parseip"] == "true"
+	}
+
+	requiredImports := sourceImports(fieldsForImports, in.Imports, needsTypeImports, needsCheckImports, needsErrorImports)
 	for _, imp := range requiredImports {
 		addImport(imp)
 	}
@@ -165,7 +180,7 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 		TypeDefs:            typeDefs,
 		Functions:           generatedFunctions,
 		Helpers:             helpers,
-		Fields:              in.Fields,
+		Fields:              defaultFields,
 		GenericInfo:         in.GenericInfo,
 		Mandatory:           mandatoryParams(in.Fields),
 		DefaultsFrom:        in.DefaultsFrom,
@@ -177,6 +192,22 @@ func (g *Generator) Generate(in model.GenerateInput) ([]byte, error) {
 	}
 
 	return g.renderPluginTemplate(data)
+}
+
+func fieldsForDefaults(fields []model.OptField) []model.OptField {
+	seen := make(map[string]bool, len(fields))
+
+	out := make([]model.OptField, 0, len(fields))
+	for _, field := range fields {
+		if seen[field.FieldName] {
+			continue
+		}
+
+		seen[field.FieldName] = true
+		out = append(out, field)
+	}
+
+	return out
 }
 
 // mandatoryParam is a constructor parameter assigned to a mandatory field.
@@ -233,6 +264,7 @@ func (g *Generator) validationCode(ctx plugin.GenerationContext, in model.Genera
 
 	checkCtx := ctx
 	checkCtx.OptionReturnsError = true
+	checkCtx.ValidationOnly = true
 
 	var lines []string
 	for _, f := range in.Fields {

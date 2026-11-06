@@ -326,6 +326,8 @@ func (c *GenerateCommand) run(cmd *cobra.Command, _ []string) error {
 	warnings := c.warnings
 	preparer := semantic.New(c.registry,
 		semantic.WithPrefix(s.optionPrefix),
+		semantic.WithFuncPrefix(cmp.Or(s.funcPrefix, model.DefaultFuncPrefix)),
+		semantic.WithInvertFuncPrefix(cmp.Or(s.invertFuncPrefix, model.DefaultInvertFuncPrefix)),
 		semantic.WithDefaultModifiers(!s.noDefaultMods),
 		semantic.WithExclude(s.exclude...),
 		semantic.WithWarningSink(warnings.warn),

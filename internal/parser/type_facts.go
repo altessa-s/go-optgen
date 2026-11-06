@@ -4,14 +4,24 @@
 
 package parser
 
-import "go/ast"
+import (
+	"go/ast"
+	"go/token"
+
+	"github.com/altessa-s/go-optgen/model"
+)
 
 // TypeFacts are the properties of a resolved field type that plugins rely on.
 type TypeFacts struct {
-	Interface  bool // The type is an interface
-	Nilable    bool // The type can be nil: pointer, slice, map, channel, function or interface
-	Numeric    bool // The underlying type is an integer or floating-point type
-	Comparable bool // Values of the type are comparable
+	Bool            bool // The type's underlying type is bool
+	Interface       bool // The type is an interface
+	Nilable         bool // The type can be nil: pointer, slice, map, channel, function or interface
+	Numeric         bool // The underlying type is an integer or floating-point type
+	Comparable      bool // Values of the type are comparable
+	MapKeyType      string
+	MapKeyString    bool
+	MapValueType    string
+	MapValueNilable bool
 }
 
 // TypeResolver supplies facts about type expressions of the parsed files. It
@@ -19,4 +29,11 @@ type TypeFacts struct {
 // type that failed to type-check; the parser then infers from the syntax.
 type TypeResolver interface {
 	TypeFacts(expr ast.Expr) (TypeFacts, bool)
+	ResolveSetterTarget(field ast.Expr, pos token.Pos, expression string, method bool, imports map[string]model.ImportInfo) (model.SetterTarget, error)
+}
+
+// CheckValueResolver reports whether a check expression is type-compatible with its field.
+type CheckValueResolver interface {
+	CheckValueValid(field ast.Expr, pos token.Pos, expression string, constant bool) bool
+	CheckValueIdentity(field ast.Expr, pos token.Pos, expression string) string
 }

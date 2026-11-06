@@ -22,13 +22,13 @@ flowchart TD
 
 | Package | Responsibility | Allowed inner dependencies |
 |---------|----------------|----------------------------|
-| `model` | Generation data, field declarations, import information | Standard library |
+| `model` | Generation data, field declarations and option docs, all source struct fields and their type facts, import information, resolved setter signatures and map entry facts | Standard library |
 | `plugin` | Extension contracts, explicit catalogs, pipeline execution | `model` |
 | `internal/application` | Parse, prepare, render, publish through ports | `model` |
-| `internal/parser` | Extract syntax without applying plugin policies | `model`, `internal/naming` |
+| `internal/parser` | Extract syntax without applying plugin policies; resolves `optfn` targets and map entry facts through the type resolver port | `model`, `internal/naming` |
 | `internal/semantic` | Validate checks, apply the option prefix, resolve type defaults, default normalization, default modifiers and settings policies (`defaults-from=none`, `with-isset`) | `model`, `plugin` |
 | `internal/generator` | Render prepared input; applies no policy | `model`, `plugin` |
-| `internal/source` | Load and type-check Go packages (`go/packages`), invoke syntax extraction with type facts | `model`, `internal/parser` |
+| `internal/source` | Load and type-check Go packages (`go/packages`), invoke syntax extraction with type facts and resolved function signatures | `model`, `internal/parser` |
 | `internal/output` | Run a formatter and atomically publish successful output | Standard library |
 | `internal/naming` | Derive option names from field names | Standard library |
 | `internal/plugin/builtin` | Register the built-in plugins | `plugin`, its sub-packages |
@@ -51,21 +51,46 @@ flowchart TD
 | Explicit registration | Importing a package must not change generation behavior. |
 | One pipeline | All field handlers share ordering, value propagation, and termination semantics. |
 | Syntax before semantics | Parsing remains deterministic regardless of registered extensions. |
-| Type facts through a parser port | The parser consumes `TypeResolver` facts; only the source adapter depends on `go/packages`. |
+| Type facts through a parser port | The parser consumes `TypeResolver` facts and resolved `optfn` signatures; only the source adapter depends on `go/packages`. |
 | Plugins compiled in | Third-party plugins register through `optgen.WithPlugins` in a wrapping `main`; nothing is loaded at runtime. |
 | Format before publication | Failed formatting preserves the previous generated file. |
 | Generated constructor options | Package tunables follow the same option conventions as generated consumers. |
 | Settings verified by the use case | `RenderSettings.Verify` runs in `application.Service`, so every caller, not only the CLI, rejects unknown modes. |
 | Default normalization through plugins | Type-specific rewriting of tag defaults (e.g. `30s` for `time.Duration`) is a `DefaultNormalizer` hook, not a semantic branch. |
+| Check bound normalization through plugins | Numeric check bounds use the field type's `DefaultNormalizer` (e.g. `1s` for `time.Duration`) before check validation and rendering. |
+| Cross-field option updates | `enables` and `resets` are validated against `SourcePackage.StructFields` and rendered by shared field templates after assignment. |
+| Collection cloning after post-processing | Clone modifiers run after all value transforms and post-processors. Eager snapshots are emitted by field templates before closure creation. |
 
 ## Plugin contracts
 
-The pipeline runs guards, transforms, post-processors, and checks in order. `OutputVar` becomes the input to subsequent modifiers and the final
-assignment. `Final` stops generation of subsequent modifiers and assignment; it must only be set when the plugin emits a terminal statement on every
-path. A generated conditional `return` leaves `Final` false. Transform plugins run in tag order before modifier plugins in the transform phase; check
-plugins run by priority and key after modifier plugins in the check phase. Metadata keys are sorted to keep generation deterministic. Field plugins
-receive the value pipeline (`plugin.Pipeline`, `BuildPipeline` only) as a `Generate` argument; check rendering for the generated validation
-function is a generator-side interface. `GenerationContext` carries generation data and collects the imports plugins emit (`AddImport`).
+The pipeline runs guards, transforms, post-processors, checks, and final collection clones in order. `OutputVar` becomes the input to subsequent
+modifiers and the final assignment. `Final` stops generation of subsequent modifiers and assignment; it must only be set when the plugin emits a
+terminal statement on every path. A conditional `return` leaves `Final` false. Transform plugins run before modifiers, in tag order.
+Check plugins run by priority and key after modifier plugins in the check phase. Metadata keys are sorted to keep generation
+deterministic. Field plugins receive the value pipeline (`plugin.Pipeline`, `BuildPipeline` only) as a `Generate` argument; check rendering for the
+generated validation function is a generator-side interface. `GenerationContext` carries generation data and collects the imports plugins emit
+(`AddImport`).
+
+The `optfn` syntax is parsed into one `OptField` per target. The source adapter resolves function expressions with `types.Eval` at the field position
+and methods with `types.LookupFieldOrMethod`; the model carries only signature strings, variadic flags, and generated imports. The source adapter keeps
+its `token.FileSet` and `types.Package` private. Map fields also carry
+rendered key and value types plus value nilability for put setters. Function-backed setters do not build the value pipeline. Defaults are deduplicated
+by field before rendering because multiple targets can share one field.
+
+Map put setters skip the empty key only when the key's underlying type is string; resolved type facts carry this property for named string keys.
+
+The parser extracts every source field into `SourcePackage.StructFields`, including fields skipped with `opt:"-"`; resolved type facts and import
+references allow semantic validation and rendering of `enables` and `resets` targets. The parser also extracts `//optgen:doc` lines from raw comment
+groups into the matching expanded `OptField` while leaving `Doc` as ordinary field text. Semantic preparation applies the option prefix to directive
+docs, and the generator validates them against the final function name using the render settings for function prefixes. `fieldtmpl` also detects a field
+doc that starts with the full generated function name and uses it as the complete doc; multi-option fields discard a doc that starts with any generated
+function name so it cannot leak to sibling options. All field plugins share this behavior through their common templates.
+
+The source adapter resolves the types, representability, and constant identities of check expressions. `OptField` carries these facts so check
+plugins can reject invalid bounds, incompatible case values, and duplicate `oneof` cases before rendering.
+
+Collection setters bypass value modifiers for map keys and values. `clone=eager` snapshots slice or map input before the option closure is created through
+the enabled clone modifier's pipeline result, while `clone` copies during closure application. Disabled clone plugins emit neither snapshots nor imports.
 
 The CLI registers only the built-in plugins; external shared objects are not loaded. Plugin implementations must keep per-generation mutable state
 in the generation context, not in package globals or shared plugin instances.

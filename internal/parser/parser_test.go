@@ -6,6 +6,7 @@ package parser_test
 
 import (
 	"go/ast"
+	"go/format"
 	"go/token"
 	"strings"
 	"testing"
@@ -121,6 +122,8 @@ func TestFindOptFields_TaggedFields(t *testing.T) {
 
 	result, err := parser.FindOptFields(pkg, "options", false, nil)
 	require.NoError(t, err)
+	require.Contains(t, result.StructFields, model.StructField{Name: "skipped", Type: "string"})
+	require.Contains(t, result.StructFields, model.StructField{Name: "plain", Type: "bool"})
 
 	names := make([]string, 0, len(result.Fields))
 	for _, f := range result.Fields {
@@ -159,6 +162,79 @@ func TestFindOptFields_TaggedFields(t *testing.T) {
 		"vaultApi": {Path: "github.com/hashicorp/vault/api", Alias: "vaultApi"},
 	}, result.Imports)
 	require.False(t, result.GenericInfo.IsGeneric())
+}
+
+func TestFindOptFields_OptionDocs(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `package sample
+type options struct {
+	// Ordinary field documentation.
+	//optgen:doc A WithA starts the A option.
+	//optgen:doc A
+	//optgen:doc A \tExample()
+	a, b int ~optgen:""~
+}
+`})
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+
+	a := fieldByOption(t, result.Fields, "A")
+	b := fieldByOption(t, result.Fields, "B")
+	require.Equal(t, "Ordinary field documentation.", a.Doc)
+	require.Equal(t, "WithA starts the A option.\n\n\\tExample()", a.OptionDoc)
+	require.True(t, a.HasOptionDoc)
+	require.False(t, b.HasOptionDoc)
+}
+
+func TestFindOptFields_OptionDocsUnknownOption(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `package sample
+type options struct {
+	//optgen:doc Missing WithMissing docs.
+	a int ~optgen:""~
+}
+`})
+	_, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.ErrorContains(t, err, "field a: optgen:doc names option Missing that this field does not produce")
+}
+
+func TestFindOptFields_OptionDocPreservesLeadingTab(t *testing.T) {
+	t.Parallel()
+
+	fixture := "package sample\ntype options struct {\n//optgen:doc A WithA starts here.\n//optgen:doc A " + "\t" + "code()\na int `optgen:\"\"`\n}\n"
+	pkg := parsePackage(t, map[string]string{"options.go": fixture})
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+	require.Equal(t, "WithA starts here.\n\tcode()", fieldByOption(t, result.Fields, "A").OptionDoc)
+}
+
+func TestFindOptFields_OptionDocsSurviveGoFormat(t *testing.T) {
+	t.Parallel()
+
+	source := `package sample
+type options struct {
+	// Human description.
+	//optgen:doc A WithA first line.
+	//optgen:doc A second line.
+	a int ~optgen:""~
+}
+`
+	parse := func(src string) []model.OptField {
+		pkg := parsePackage(t, map[string]string{"options.go": src})
+		result, err := parser.FindOptFields(pkg, "options", false, nil)
+		require.NoError(t, err)
+
+		return result.Fields
+	}
+
+	before := parse(source)
+	formatted, err := format.Source([]byte(src(source)))
+	require.NoError(t, err)
+
+	after := parse(strings.ReplaceAll(string(formatted), "`", "~"))
+	require.Equal(t, before, after)
 }
 
 func TestFindOptFields_ProcessAllFields(t *testing.T) {
@@ -266,6 +342,125 @@ type options struct {
 	field := result.Fields[0]
 	require.Equal(t, "10", field.Default)
 	require.Equal(t, map[string]string{"append": "true", "err": "custom"}, field.Metadata)
+}
+
+func TestFindOptFields_MapFacts(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `
+package sample
+
+type options struct {
+    value map[string]Alias ~opt:"Value" optgen:"put"~
+}
+`})
+
+	result, err := parser.FindOptFields(pkg, "options", false, resolvedMapFacts{})
+	require.NoError(t, err)
+
+	field := result.Fields[0]
+
+	require.Equal(t, "map[string]Alias", field.Type)
+	require.True(t, field.IsMap)
+	require.Equal(t, "string", field.MapKeyType)
+	require.Equal(t, "Alias", field.MapValueType)
+	require.True(t, field.MapValueNilable)
+	require.True(t, field.TypeResolved)
+}
+
+func TestFindOptFields_MapValueNilableSyntaxFallback(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `
+package sample
+
+type options struct {
+	callback map[string]func() ~optgen:"put"~
+	value    map[string]any ~optgen:"put"~
+	count    map[string]uint8 ~optgen:"put"~
+}
+`})
+
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+
+	byName := map[string]model.OptField{}
+	for _, field := range result.Fields {
+		byName[field.FieldName] = field
+	}
+
+	require.True(t, byName["callback"].MapValueNilable)
+	require.True(t, byName["value"].MapValueNilable)
+	require.False(t, byName["count"].MapValueNilable)
+}
+
+type resolvedMapFacts struct{}
+
+func (resolvedMapFacts) TypeFacts(ast.Expr) (parser.TypeFacts, bool) {
+	return parser.TypeFacts{Nilable: true, MapKeyType: "string", MapValueType: "Alias", MapValueNilable: true}, true
+}
+
+func (resolvedMapFacts) ResolveSetterTarget(ast.Expr, token.Pos, string, bool, map[string]model.ImportInfo) (model.SetterTarget, error) {
+	return model.SetterTarget{}, nil
+}
+
+func (resolvedMapFacts) CheckValueValid(ast.Expr, token.Pos, string, bool) bool { return false }
+
+func (resolvedMapFacts) CheckValueIdentity(ast.Expr, token.Pos, string) string { return "" }
+
+func TestFindOptFields_CollectionTagValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		typ    string
+		tag    string
+		wanted string
+	}{
+		{name: "set non map", typ: "[]string", tag: `optgen:"set"`, wanted: "optgen set requires map[K]struct{}"},
+		{name: "set map with value", typ: "map[string]int", tag: `optgen:"set"`, wanted: "optgen set requires map[K]struct{}"},
+		{name: "put non map", typ: "string", tag: `optgen:"put"`, wanted: "optgen put requires a map field"},
+		{name: "clone scalar", typ: "int", tag: `optval:"clone"`, wanted: "directly declared slice or map field"},
+		{name: "clone fixed array", typ: "[16]byte", tag: `optval:"clone"`, wanted: "directly declared slice or map field"},
+		{name: "clone named slice", typ: "Items", tag: `optval:"clone"`, wanted: "named slice and map types are unsupported"},
+		{name: "set named map", typ: "Set", tag: `optgen:"set"`, wanted: "named map types are unsupported"},
+		{name: "put named map", typ: "Set", tag: `optgen:"put"`, wanted: "named map types are unsupported"},
+		{name: "put checks", typ: "map[string]int", tag: `optgen:"put" optcheck:"minlen=1"`, wanted: "optgen put cannot be combined with optcheck"},
+		{name: "set modifiers", typ: "map[string]struct{}", tag: `optgen:"set" optval:"clone"`, wanted: "optgen set cannot be combined with optval"},
+		{name: "invalid clone mode", typ: "[]string", tag: `optval:"clone=invalid"`, wanted: "unsupported clone mode"},
+		{name: "case insensitive invalid clone mode", typ: "[]string", tag: `optval:"Clone=INVALID"`, wanted: "unsupported clone mode"},
+		{name: "parseip eager clone", typ: "[]net.IP", tag: `optgen:"parseip" optval:"clone=eager"`, wanted: "parseip cannot be combined"},
+		{name: "case insensitive parseip eager clone", typ: "[]net.IP", tag: `optgen:"parseip" optval:"Clone=EAGER"`, wanted: "parseip cannot be combined"},
+		{name: "put unsupported guard", typ: "map[string]int", tag: `optgen:"put,notnil"`, wanted: "put cannot be combined with optgen modifier \"notnil\""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pkg := parsePackage(t, map[string]string{"options.go": "package sample\ntype options struct { value " + tc.typ + " `" + tc.tag + "` }"})
+			_, err := parser.FindOptFields(pkg, "options", false, nil)
+			require.ErrorContains(t, err, tc.wanted)
+		})
+	}
+}
+
+func TestFindOptFieldsAcceptsCaseInsensitiveCloneEager(t *testing.T) {
+	t.Parallel()
+	pkg := parsePackage(t, map[string]string{"options.go": "package sample\ntype options struct { values []string `optval:\"Clone=EAGER\"` }"})
+	result, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Clone=EAGER"}, result.Fields[0].Modifiers)
+}
+
+func TestFindOptFieldsRejectsEmptyOptionDocDirective(t *testing.T) {
+	t.Parallel()
+
+	pkg := parsePackage(t, map[string]string{"options.go": `package sample
+type options struct {
+//optgen:doc
+value string ` + "`opt:\"Value\"`" + `
+}
+`})
+	_, err := parser.FindOptFields(pkg, "options", false, nil)
+	require.ErrorContains(t, err, "optgen:doc requires an option name")
 }
 
 func TestFindOptFields_LineCommentDoc(t *testing.T) {
@@ -767,4 +962,13 @@ func TestFindOptFieldsRejectsDeclarationsInSeveralFiles(t *testing.T) {
 	})
 	_, err := parser.FindOptFields(pkg, "options", false, nil)
 	require.ErrorContains(t, err, "type options is declared in several files (options_darwin.go, options_linux.go)")
+}
+
+func TestGroupedFieldsDoNotCountAsMultiOption(t *testing.T) {
+	t.Parallel()
+	pkg := parsePackage(t, map[string]string{"options.go": "package sample\ntype options struct { // WithA configures A.\n a, b string }\n"})
+	result, err := parser.FindOptFields(pkg, "options", true, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, "true", result.Fields[0].Metadata["multiopt"])
+	require.NotEqual(t, "true", result.Fields[1].Metadata["multiopt"])
 }

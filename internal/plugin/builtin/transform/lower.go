@@ -17,6 +17,6 @@ type LowerTransformPlugin struct {
 
 // Apply wraps expr in the transformation.
 func (t *LowerTransformPlugin) Apply(ctx plugin.GenerationContext, _ model.OptField, _ string, expr string) (string, bool) {
-	ctx.AddImport("strings")
-	return "strings.ToLower(" + expr + ")", true
+	pkg := ctx.AddStdlibImport("strings", "strings")
+	return pkg + ".ToLower(" + expr + ")", true
 }

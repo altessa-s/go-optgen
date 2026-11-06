@@ -29,11 +29,13 @@ func (p *DefaultAppenderPlugin) Meta() plugin.Meta {
 	}
 }
 
-var appenderTemplate = fieldtmpl.Must("appender", `// {{.FuncPrefix}}{{.OptionName}} appends to the {{.FieldName}} option.{{.DocComment}}
-func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(v {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
+var appenderTemplate = fieldtmpl.Must("appender", `{{template "optionDoc" .}}
+func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}(`+
+	`{{.InputVar}} {{if .SliceParam}}{{.Type}}{{else}}...{{.ElemType}}{{end}}) {{.OptionType}}{{.TypeParamsNames}} {
+	{{- .PreClosureCode}}
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
-{{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = append(o.{{.FieldName}}, {{.ValueExpr}}...)
-{{- end}}{{- template "optionReturn" . }}
+{{.PipelineCode}}{{if not .Final}}		{{.MarkSet}}o.{{.FieldName}} = append(o.{{.FieldName}}, {{.ValueExpr}}...){{if .PostAssignment}}
+		{{.PostAssignment}}{{end}}{{- end}}{{- template "optionReturn" . }}
 	}
 }`)
 
@@ -51,5 +53,7 @@ func (p *DefaultAppenderPlugin) CanHandle(field model.OptField) bool {
 // Generate renders the option function for field.
 func (p *DefaultAppenderPlugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
 	data := fieldtmpl.NewData(ctx, field, values, "v")
-	return fieldtmpl.Execute(appenderTemplate, data)
+	data.DocSummary = "appends to the " + field.FieldName + " option."
+
+	return fieldtmpl.Execute(appenderTemplate, &data)
 }

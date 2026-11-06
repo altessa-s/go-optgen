@@ -5,16 +5,21 @@
 package source
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/constant"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"maps"
+	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -68,7 +73,7 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 
 		var resolver optparser.TypeResolver
 		if typed {
-			resolver = typeFacts{info: pkg.info}
+			resolver = typeFacts{info: pkg.info, fset: pkg.fset, types: pkg.types}
 		}
 
 		result, err := optparser.FindOptFields(pkg.ast, typeName, all, resolver)
@@ -81,8 +86,10 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 			return nil, err
 		}
 
-		out = append(out, model.SourcePackage{Name: pkg.ast.Name, Fields: result.Fields, Imports: result.Imports, GenericInfo: result.GenericInfo,
-			NormalizationMethod: normalization, IsSetField: result.IsSetField})
+		out = append(out, model.SourcePackage{
+			Name: pkg.ast.Name, Fields: result.Fields, StructFields: result.StructFields, Imports: result.Imports, GenericInfo: result.GenericInfo,
+			NormalizationMethod: normalization, IsSetField: result.IsSetField,
+		})
 	}
 
 	return out, nil
@@ -90,8 +97,10 @@ func (r Reader) Parse(ctx context.Context, dir, typeName string, all bool) ([]mo
 
 // loadedPackage is a parsed package and, when type-checked, its type info.
 type loadedPackage struct {
-	ast  *ast.Package //nolint:staticcheck // The parser API intentionally operates on go/ast packages.
-	info *types.Info
+	ast   *ast.Package //nolint:staticcheck // The parser API intentionally operates on go/ast packages.
+	info  *types.Info
+	fset  *token.FileSet
+	types *types.Package
 }
 
 // load type-checks dir with go/packages, or parses it without types when it
@@ -123,7 +132,10 @@ func load(ctx context.Context, dir string) ([]loadedPackage, bool, error) {
 		files[filepath.Base(fset.File(f.Pos()).Name())] = f
 	}
 
-	return []loadedPackage{{ast: &ast.Package{Name: pkg.Name, Files: files}, info: pkg.TypesInfo}}, true, nil //nolint:staticcheck // See loadedPackage.
+	return []loadedPackage{{
+		ast:  &ast.Package{Name: pkg.Name, Files: files}, //nolint:staticcheck // See loadedPackage.
+		info: pkg.TypesInfo, fset: fset, types: pkg.Types,
+	}}, true, nil //nolint:staticcheck // See loadedPackage.
 }
 
 // parseDir parses every non-test file of dir without type information.
@@ -144,7 +156,11 @@ func parseDir(dir string) ([]loadedPackage, error) {
 }
 
 // typeFacts resolves field type facts from type-checked syntax.
-type typeFacts struct{ info *types.Info }
+type typeFacts struct {
+	info  *types.Info
+	fset  *token.FileSet
+	types *types.Package
+}
 
 // TypeFacts reports the facts of expr's type, or false for unknown types and
 // type parameters, whose properties depend on the instantiation.
@@ -158,17 +174,618 @@ func (r typeFacts) TypeFacts(expr ast.Expr) (optparser.TypeFacts, bool) {
 		return optparser.TypeFacts{}, false
 	}
 
-	facts := optparser.TypeFacts{Interface: types.IsInterface(t), Comparable: types.Comparable(t)}
+	facts := optparser.TypeFacts{
+		Interface: types.IsInterface(t), Comparable: types.Comparable(t),
+		Bool: types.Identical(types.Unalias(t).Underlying(), types.Typ[types.Bool]),
+	}
 	switch u := t.Underlying().(type) {
+	case *types.Map:
+		facts.Nilable = true
+		facts.MapKeyType = types.TypeString(u.Key(), nil)
+
+		if key, ok := types.Unalias(u.Key()).Underlying().(*types.Basic); ok {
+			facts.MapKeyString = key.Kind() == types.String
+		}
+
+		facts.MapValueType = types.TypeString(u.Elem(), nil)
+		facts.MapValueNilable = typeNilable(u.Elem())
 	case *types.Basic:
 		if u.Kind() == types.Invalid {
 			return optparser.TypeFacts{}, false
 		}
 
 		facts.Numeric = u.Info()&types.IsNumeric != 0 && u.Info()&types.IsComplex == 0
-	case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Signature, *types.Interface:
+	case *types.Pointer, *types.Slice, *types.Chan, *types.Signature, *types.Interface:
 		facts.Nilable = true
 	}
 
 	return facts, true
+}
+
+func (r typeFacts) CheckValueValid(field ast.Expr, pos token.Pos, expression string, requireConstant bool) bool {
+	fieldType := r.info.TypeOf(field)
+	if fieldType == nil {
+		return false
+	}
+
+	value, err := types.Eval(r.fset, r.types, pos, expression)
+	if err != nil || value.Type == nil || requireConstant && value.Value == nil {
+		return false
+	}
+
+	if value.Value != nil {
+		if target, ok := types.Unalias(fieldType).Underlying().(*types.Basic); ok && target.Info()&types.IsInteger != 0 {
+			if !integerConstantRepresentable(value.Value, target.Kind()) {
+				return false
+			}
+		}
+	}
+
+	return types.AssignableTo(value.Type, fieldType)
+}
+
+func (r typeFacts) CheckValueIdentity(field ast.Expr, pos token.Pos, expression string) string {
+	if r.info.TypeOf(field) == nil {
+		return ""
+	}
+
+	value, err := types.Eval(r.fset, r.types, pos, expression)
+	if err != nil || value.Value == nil {
+		return ""
+	}
+
+	return value.Value.Kind().String() + ":" + value.Value.String()
+}
+
+func integerConstantRepresentable(value constant.Value, kind types.BasicKind) bool {
+	integer := constant.ToInt(value)
+	if integer.Kind() == constant.Unknown {
+		return false
+	}
+
+	var constantInteger *big.Int
+
+	switch value := constant.Val(integer).(type) {
+	case int64:
+		constantInteger = big.NewInt(value)
+	case *big.Int:
+		constantInteger = value
+	default:
+		return false
+	}
+
+	var bits int
+
+	signed := true
+
+	switch kind {
+	case types.Int8:
+		bits = 8
+	case types.Int16:
+		bits = 16
+	case types.Int32:
+		bits = 32
+	case types.Int64:
+		bits = 64
+	case types.Uint, types.Uintptr:
+		signed = false
+		bits = int(types.SizesFor("gc", runtime.GOARCH).Sizeof(types.Typ[kind]) * bitsPerByte)
+	case types.Uint8:
+		signed = false
+		bits = 8
+	case types.Uint16:
+		signed = false
+		bits = 16
+	case types.Uint32:
+		signed = false
+		bits = 32
+	case types.Uint64:
+		signed = false
+		bits = 64
+	case types.Int:
+		bits = int(types.SizesFor("gc", runtime.GOARCH).Sizeof(types.Typ[kind]) * bitsPerByte)
+	default:
+		return true
+	}
+
+	if !signed {
+		return constantInteger.Sign() >= 0 && constantInteger.BitLen() <= bits
+	}
+
+	lowerBound := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), uint(bits-1)))
+	upperBound := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), uint(bits-1)), big.NewInt(1))
+
+	return constantInteger.Cmp(lowerBound) >= 0 && constantInteger.Cmp(upperBound) <= 0
+}
+
+func typeNilable(t types.Type) bool {
+	if _, ok := types.Unalias(t).(*types.TypeParam); ok {
+		return false
+	}
+
+	switch t.Underlying().(type) {
+	case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Signature, *types.Interface:
+		return true
+	default:
+		return false
+	}
+}
+
+const (
+	maxSetterResults = 2
+	bitsPerByte      = 8
+)
+
+// ResolveSetterTarget resolves an optfn function or method and renders its parameter signature.
+func (r typeFacts) ResolveSetterTarget(
+	field ast.Expr,
+	pos token.Pos,
+	expression string,
+	method bool,
+	imports map[string]model.ImportInfo,
+) (model.SetterTarget, error) {
+	if r.types == nil || r.info == nil || r.fset == nil {
+		return model.SetterTarget{}, fmt.Errorf("type information is unavailable")
+	}
+
+	signature, targetPackage, err := r.setterSignature(field, pos, expression, method, imports)
+	if err != nil {
+		return model.SetterTarget{}, err
+	}
+
+	if signature.TypeParams() != nil && signature.TypeParams().Len() > 0 {
+		return model.SetterTarget{}, fmt.Errorf("generic target must be explicitly instantiated")
+	}
+
+	if signature.Results().Len() < 1 || signature.Results().Len() > maxSetterResults {
+		return model.SetterTarget{}, fmt.Errorf("target must return a value and optionally an error")
+	}
+
+	fieldType := r.info.TypeOf(field)
+	if fieldType == nil || hasInvalidType(signature) {
+		return model.SetterTarget{}, fmt.Errorf("target signature contains an unresolved type")
+	}
+
+	resultType := signature.Results().At(0).Type()
+	if !types.AssignableTo(resultType, fieldType) {
+		return model.SetterTarget{}, fmt.Errorf("result is not assignable to field type")
+	}
+
+	returnsError := signature.Results().Len() == maxSetterResults && types.Identical(signature.Results().At(1).Type(), types.Universe.Lookup("error").Type())
+	if signature.Results().Len() == maxSetterResults && !returnsError {
+		return model.SetterTarget{}, fmt.Errorf("second result must be error")
+	}
+
+	target := model.SetterTarget{Expression: expression, Method: method, ReturnsError: returnsError}
+
+	importsForTarget := newTargetImports(r.types, imports, expression, method, targetPackage)
+	if !method {
+		target.Expression = qualifyDotImportedTypeArguments(expression, imports, r.types, &importsForTarget)
+	}
+
+	if !method && targetPackage != nil && targetPackage.Path() != r.types.Path() {
+		if root := expressionRootIdentifier(expression); root != "" {
+			if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok && fn.Pkg().Path() == r.types.Path() {
+				// Keep functions declared in the current package unqualified.
+			} else {
+				target.Expression = importsForTarget.qualifier(targetPackage) + "." + target.Expression
+			}
+		}
+	}
+
+	target.Parameters = setterParameters(signature, importsForTarget.qualifier)
+	target.Imports = importsForTarget.imports
+
+	return target, nil
+}
+
+func qualifyDotImportedTypeArguments(
+	expression string,
+	imports map[string]model.ImportInfo,
+	current *types.Package,
+	resolver *targetImportResolver,
+) string {
+	dotPackages := make([]*types.Package, 0)
+
+	for _, imp := range imports {
+		if imp.Alias != "." {
+			continue
+		}
+
+		for _, imported := range current.Imports() {
+			if imported.Path() == imp.Path {
+				dotPackages = append(dotPackages, imported)
+			}
+		}
+	}
+
+	if len(dotPackages) == 0 {
+		return expression
+	}
+
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return expression
+	}
+
+	qualify := func(expr ast.Expr) ast.Expr {
+		ident, ok := expr.(*ast.Ident)
+		if !ok {
+			return expr
+		}
+
+		for _, imported := range dotPackages {
+			if !ast.IsExported(ident.Name) {
+				continue
+			}
+
+			if imported.Scope().Lookup(ident.Name) == nil {
+				continue
+			}
+
+			return &ast.SelectorExpr{X: ast.NewIdent(resolver.qualifier(imported)), Sel: ident}
+		}
+
+		return expr
+	}
+	ast.Inspect(expr, func(node ast.Node) bool {
+		switch index := node.(type) {
+		case *ast.IndexExpr:
+			index.Index = qualify(index.Index)
+		case *ast.IndexListExpr:
+			for i := range index.Indices {
+				index.Indices[i] = qualify(index.Indices[i])
+			}
+		}
+
+		return true
+	})
+
+	var rendered bytes.Buffer
+	if err := format.Node(&rendered, token.NewFileSet(), expr); err != nil {
+		return expression
+	}
+
+	return rendered.String()
+}
+
+func (r typeFacts) setterSignature(
+	field ast.Expr,
+	pos token.Pos,
+	expression string,
+	method bool,
+	imports map[string]model.ImportInfo,
+) (*types.Signature, *types.Package, error) {
+	if method {
+		fieldType := r.info.TypeOf(field)
+		if fieldType == nil {
+			return nil, nil, fmt.Errorf("field type is unresolved")
+		}
+
+		name := strings.TrimPrefix(expression, ".")
+		obj, _, _ := types.LookupFieldOrMethod(fieldType, true, r.types, name)
+
+		fn, ok := obj.(*types.Func)
+		if !ok {
+			return nil, nil, fmt.Errorf("method %q was not found", name)
+		}
+
+		sig, _ := fn.Type().(*types.Signature)
+
+		return sig, fn.Pkg(), nil
+	}
+
+	value, err := types.Eval(r.fset, r.types, pos, expression)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sig, ok := value.Type.(*types.Signature)
+	if !ok {
+		return nil, nil, fmt.Errorf("target is not a function")
+	}
+
+	if root := expressionRootIdentifier(expression); root != "" {
+		if targetPackage := r.setterTargetPackage(root, imports); targetPackage != nil {
+			return sig, targetPackage, nil
+		}
+	}
+
+	return sig, r.types, nil
+}
+
+func (r typeFacts) setterTargetPackage(root string, imports map[string]model.ImportInfo) *types.Package {
+	if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok {
+		return fn.Pkg()
+	}
+
+	for _, imp := range imports {
+		if imp.Alias != "." {
+			continue
+		}
+
+		for _, imported := range r.types.Imports() {
+			if imported.Path() == imp.Path {
+				if _, ok := imported.Scope().Lookup(root).(*types.Func); ok {
+					return imported
+				}
+			}
+		}
+	}
+
+	for _, imported := range r.types.Imports() {
+		if _, ok := imported.Scope().Lookup(root).(*types.Func); ok {
+			return imported
+		}
+	}
+
+	return nil
+}
+
+func expressionRootIdentifier(expression string) string {
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return ""
+	}
+
+	for {
+		switch node := expr.(type) {
+		case *ast.IndexExpr:
+			expr = node.X
+		case *ast.IndexListExpr:
+			expr = node.X
+		case *ast.Ident:
+			return node.Name
+		default:
+			return ""
+		}
+	}
+}
+
+type targetImportResolver struct {
+	imports []model.GeneratedImport
+	aliases map[string]string
+	current string
+}
+
+func newTargetImports(
+	current *types.Package,
+	imports map[string]model.ImportInfo,
+	expression string,
+	method bool,
+	targetPackage *types.Package,
+) targetImportResolver {
+	resolver := targetImportResolver{aliases: make(map[string]string), current: current.Path()}
+
+	for _, imp := range imports {
+		if imp.Alias != "" && imp.Alias != "_" && imp.Alias != "." {
+			resolver.aliases[imp.Path] = imp.Alias
+		}
+	}
+
+	if targetPackage != nil && !method {
+		resolver.qualifier(targetPackage)
+	}
+
+	if !method {
+		addSelectorImports(&resolver, current, imports, expression)
+	}
+
+	return resolver
+}
+
+func addSelectorImports(resolver *targetImportResolver, current *types.Package, imports map[string]model.ImportInfo, expression string) {
+	for _, prefix := range selectorPrefixes(expression) {
+		imp, found := importForPrefix(current, imports, prefix)
+		if !found || imp.Path == "" {
+			continue
+		}
+
+		alias := imp.Alias
+		if alias == "_" || alias == "." {
+			alias = ""
+		}
+
+		if alias == "" && prefix != derivePackageName(imp.Path) {
+			alias = prefix
+		}
+
+		resolver.aliases[imp.Path] = alias
+		if !slices.ContainsFunc(resolver.imports, func(existing model.GeneratedImport) bool { return existing.Path == imp.Path }) {
+			resolver.imports = append(resolver.imports, model.GeneratedImport{Path: imp.Path, Alias: alias})
+		}
+	}
+}
+
+func importForPrefix(current *types.Package, imports map[string]model.ImportInfo, prefix string) (model.ImportInfo, bool) {
+	if imp, ok := imports[prefix]; ok {
+		return imp, true
+	}
+
+	for _, imported := range current.Imports() {
+		if imported.Name() == prefix {
+			return model.ImportInfo{Path: imported.Path(), Alias: prefix}, true
+		}
+	}
+
+	return model.ImportInfo{}, false
+}
+
+func (r *targetImportResolver) qualifier(pkg *types.Package) string {
+	if pkg == nil || pkg.Path() == r.current {
+		return ""
+	}
+
+	if alias, ok := r.aliases[pkg.Path()]; ok {
+		if !slices.ContainsFunc(r.imports, func(imp model.GeneratedImport) bool { return imp.Path == pkg.Path() }) {
+			importAlias := alias
+			if importAlias == pkg.Name() {
+				importAlias = ""
+			}
+
+			r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: importAlias})
+		}
+
+		if alias == "" {
+			return pkg.Name()
+		}
+
+		return alias
+	}
+
+	alias := ""
+	if pkg.Name() != derivePackageName(pkg.Path()) {
+		alias = pkg.Name()
+	}
+
+	if !slices.ContainsFunc(r.imports, func(imp model.GeneratedImport) bool { return imp.Path == pkg.Path() }) {
+		r.imports = append(r.imports, model.GeneratedImport{Path: pkg.Path(), Alias: alias})
+	}
+
+	r.aliases[pkg.Path()] = pkg.Name()
+	if alias == "" {
+		return pkg.Name()
+	}
+
+	return alias
+}
+
+func selectorPrefixes(expression string) []string {
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return nil
+	}
+
+	var prefixes []string
+
+	ast.Inspect(expr, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		if ident, ok := selector.X.(*ast.Ident); ok {
+			prefixes = append(prefixes, ident.Name)
+		}
+
+		return true
+	})
+
+	return slices.Compact(slices.Sorted(slices.Values(prefixes)))
+}
+
+func derivePackageName(importPath string) string {
+	parts := strings.Split(importPath, "/")
+
+	name := parts[len(parts)-1]
+	if len(parts) > 1 && len(name) > 1 && name[0] == 'v' && strings.Trim(name[1:], "0123456789") == "" {
+		name = parts[len(parts)-2]
+	}
+
+	name, _, _ = strings.Cut(name, ".")
+
+	return name
+}
+
+func setterParameters(signature *types.Signature, qualifier types.Qualifier) []model.FuncParameter {
+	params := slices.Collect(signature.Params().Variables())
+
+	out := make([]model.FuncParameter, 0, len(params))
+	for i, param := range params {
+		name := param.Name()
+		if name == "" || name == "_" {
+			name = fmt.Sprintf("arg%d", i)
+		}
+
+		variadic := signature.Variadic() && i == len(params)-1
+
+		paramType := param.Type()
+		if variadic {
+			if sliceType, ok := paramType.(*types.Slice); ok {
+				paramType = sliceType.Elem()
+			}
+		}
+
+		out = append(out, model.FuncParameter{Name: name, Type: types.TypeString(paramType, qualifier), Variadic: variadic})
+	}
+
+	return out
+}
+
+func hasInvalidType(sig *types.Signature) bool {
+	for param := range sig.Params().Variables() {
+		if containsInvalid(param.Type()) {
+			return true
+		}
+	}
+
+	for result := range sig.Results().Variables() {
+		if containsInvalid(result.Type()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsInvalid(t types.Type) bool {
+	return containsInvalidType(t, make(map[types.Type]bool))
+}
+
+func containsInvalidType(t types.Type, visited map[types.Type]bool) bool {
+	if t == nil || visited[t] {
+		return false
+	}
+
+	visited[t] = true
+
+	if alias, ok := t.(*types.Alias); ok {
+		for arg := range alias.TypeArgs().Types() {
+			if containsInvalidType(arg, visited) {
+				return true
+			}
+		}
+	}
+
+	t = types.Unalias(t)
+
+	switch typ := t.(type) {
+	case *types.Basic:
+		return typ.Kind() == types.Invalid
+	case *types.Array:
+		return containsInvalidType(typ.Elem(), visited)
+	case *types.Slice:
+		return containsInvalidType(typ.Elem(), visited)
+	case *types.Pointer:
+		return containsInvalidType(typ.Elem(), visited)
+	case *types.Map:
+		return containsInvalidType(typ.Key(), visited) || containsInvalidType(typ.Elem(), visited)
+	case *types.Chan:
+		return containsInvalidType(typ.Elem(), visited)
+	case *types.Signature:
+		for param := range typ.Params().Variables() {
+			if containsInvalidType(param.Type(), visited) {
+				return true
+			}
+		}
+
+		for result := range typ.Results().Variables() {
+			if containsInvalidType(result.Type(), visited) {
+				return true
+			}
+		}
+
+	case *types.Named:
+		if typ.Obj().Pkg() == nil && typ.Obj().Parent() != types.Universe || containsInvalidType(typ.Underlying(), visited) {
+			return true
+		}
+
+		for arg := range typ.TypeArgs().Types() {
+			if containsInvalidType(arg, visited) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

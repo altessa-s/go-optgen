@@ -7,6 +7,8 @@ package plugin
 import (
 	"cmp"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/altessa-s/go-optgen/model"
 )
@@ -28,6 +30,15 @@ type GenerationContext struct {
 
 	// AllFields contains all fields being generated.
 	AllFields []model.OptField
+	// StructFields contains every source struct field, including fields without generated options.
+	StructFields []model.StructField
+	// ValidationOnly identifies checks emitted in the generated validate method.
+	ValidationOnly bool
+	// OnFailSkip selects a no-op return for a failed option-body check.
+	OnFailSkip bool
+	// InputVar names the original value variable before the modifier pipeline.
+	InputVar             string
+	InputIsNewCollection bool
 
 	// Imports contains all imports available in the source file.
 	// Map key is the package alias, value is import info.
@@ -99,6 +110,118 @@ func (ctx *GenerationContext) AddImport(path string, alias ...string) {
 	}
 
 	ctx.additionalImports[path] = imp
+}
+
+// AddStdlibImport adds a standard-library import using a free package name and
+// returns the identifier plugins should use in generated code.
+func (ctx *GenerationContext) AddStdlibImport(path, preferred string) string {
+	used := make(map[string]bool, len(ctx.Imports)+len(ctx.additionalImports))
+	for alias, imp := range ctx.Imports {
+		if alias != "" && alias != "_" && alias != "." && imp.Path != path {
+			used[alias] = true
+		}
+	}
+
+	for impPath, imp := range ctx.additionalImports {
+		if imp.Alias != "" && impPath != path {
+			used[imp.Alias] = true
+		}
+	}
+
+	alias := preferred
+	for suffix := 2; used[alias]; suffix++ {
+		alias = preferred + strconv.Itoa(suffix)
+	}
+
+	if alias == preferred {
+		ctx.AddImport(path)
+	} else {
+		ctx.AddImport(path, alias)
+	}
+
+	return alias
+}
+
+// BodyIdentifiers returns source identifiers referenced by a generated option
+// body, including check expressions and cross-field reset types.
+func BodyIdentifiers(ctx GenerationContext, field model.OptField, sources ...string) map[string]bool {
+	used := make(map[string]bool)
+	used[ctx.TypeName] = true
+
+	used["o"] = true
+	for _, param := range ctx.GenericInfo.TypeParams {
+		used[param.Name] = true
+	}
+
+	if ctx.WithIsSet {
+		used[ctx.IsSetConst(field)] = true
+	}
+
+	for alias := range ctx.Imports {
+		if alias != "_" && alias != "." {
+			used[alias] = true
+		}
+	}
+
+	for _, expression := range field.Checks {
+		addIdentifiers(used, expression)
+	}
+
+	for _, source := range sources {
+		addIdentifiers(used, source)
+	}
+
+	addIdentifiers(used, field.Metadata["err"])
+
+	for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
+		target = strings.TrimSpace(target)
+		for _, sourceField := range ctx.StructFields {
+			if sourceField.Name != target {
+				continue
+			}
+
+			addIdentifiers(used, sourceField.Type)
+
+			for _, imp := range sourceField.TypeImports {
+				addIdentifiers(used, imp.Alias)
+			}
+
+			break
+		}
+	}
+
+	return used
+}
+
+func addIdentifiers(used map[string]bool, source string) {
+	for i := 0; i < len(source); {
+		if !identifierStart(source[i]) {
+			i++
+			continue
+		}
+
+		start := i
+		for i < len(source) && identifierContinue(source[i]) {
+			i++
+		}
+
+		used[source[start:i]] = true
+	}
+}
+
+func identifierStart(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+func identifierContinue(c byte) bool { return identifierStart(c) || c >= '0' && c <= '9' }
+
+// UniqueIdentifier appends Arg until name is absent from used identifiers.
+func UniqueIdentifier(name string, used map[string]bool) string {
+	for used[name] {
+		name += "Arg"
+	}
+
+	return name
 }
 
 // GetAdditionalImports returns a deterministically-sorted slice of all imports

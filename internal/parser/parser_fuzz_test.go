@@ -54,6 +54,28 @@ func FuzzExpressionList(f *testing.F) {
 	})
 }
 
+func FuzzSetterTargets(f *testing.F) {
+	for _, seed := range []string{"WithName=makeName", "Map=.WithExact, Types=maps.New[string, Kind]", "", "A=x,A=y"} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, input string) {
+		got, err := parser.ParseSetterTargets(input)
+		if err != nil {
+			return
+		}
+
+		parsed, parseErr := parser.ParseSetterTargets(input)
+		require.NoError(t, parseErr)
+		require.Equal(t, got, parsed)
+
+		for name, target := range got {
+			require.NotEmpty(t, name)
+			require.NotEmpty(t, target)
+		}
+	})
+}
+
 func TestSkippedFieldsNeverRetainDefaults(t *testing.T) {
 	t.Parallel()
 
