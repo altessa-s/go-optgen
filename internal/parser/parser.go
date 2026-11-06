@@ -403,6 +403,7 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 			ElemComparable: elemResolved && elemFacts.Comparable,
 		}
 		base.CheckValueValid = checkValueFacts(field, parsed, types)
+		base.CheckValueIdentity = checkValueIdentities(field, parsed, types)
 
 		if len(parsed.SetterTargets) == 0 {
 			out = append(out, base)
@@ -436,6 +437,23 @@ func buildOptFields(field *ast.Field, ctx fieldProcessingContext, imports map[st
 	}
 
 	return out, nil
+}
+
+func checkValueIdentities(field *ast.Field, parsed parsedFieldTags, resolver TypeResolver) map[string]string {
+	factsResolver, ok := resolver.(CheckValueResolver)
+	if !ok {
+		return nil
+	}
+
+	identities := make(map[string]string)
+
+	for _, expression := range ParseExprList(parsed.Checks[checkOneOfKey]) {
+		if identity := factsResolver.CheckValueIdentity(field.Type, field.Pos(), expression); identity != "" {
+			identities[expression] = identity
+		}
+	}
+
+	return identities
 }
 
 func checkValueFacts(field *ast.Field, parsed parsedFieldTags, resolver TypeResolver) map[string]bool {
@@ -595,13 +613,13 @@ func validateCollectionType(fieldName string, fieldType ast.Expr, isSet, isPut b
 
 		value, emptyStruct := mapTypeValue(mapType)
 		if !ok || !emptyStruct || TypeToString(value) != "struct{}" {
-			return fmt.Errorf("field %s: optgen set requires map[K]struct{}", fieldName)
+			return fmt.Errorf("field %s: optgen set requires map[K]struct{}; named map types are unsupported", fieldName)
 		}
 	}
 
 	if isPut {
 		if _, ok := fieldType.(*ast.MapType); !ok {
-			return fmt.Errorf("field %s: optgen put requires a map field", fieldName)
+			return fmt.Errorf("field %s: optgen put requires a map field; named map types are unsupported", fieldName)
 		}
 	}
 
@@ -661,7 +679,7 @@ func validateCloneType(fieldName string, fieldType ast.Expr, modifiers []string)
 			continue
 		}
 
-		return fmt.Errorf("field %s: optval %s requires a slice or map field", fieldName, modifier)
+		return fmt.Errorf("field %s: optval %s requires a directly declared slice or map field; named slice and map types are unsupported", fieldName, modifier)
 	}
 
 	return nil

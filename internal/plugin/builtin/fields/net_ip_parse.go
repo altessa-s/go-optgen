@@ -49,9 +49,9 @@ var netIPParseTemplate = fieldtmpl.Must("net-ip-parse",
 	`{{template "optionDoc" .}}
 func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.ParamVar}} ...string) {{.OptionType}}{{.TypeParamsNames}} {
 	return func(o *{{.TypeName}}{{.TypeParamsNames}}){{if .OptionReturnsError}} error{{end}} {
-		{{.InputVar}} := make([]net.IP, 0, len({{.ParamVar}}))
+		{{.InputVar}} := make([]{{.NetPackage}}.IP, 0, len({{.ParamVar}}))
 		for _, {{.RangeVar}} := range {{.ParamVar}} {
-			{{.IPVar}} := net.ParseIP({{.RangeVar}})
+			{{.IPVar}} := {{.NetPackage}}.ParseIP({{.RangeVar}})
 			if {{.IPVar}} == nil {
 				{{- if .OptionReturnsError}}
 				return {{.ErrExpr}}
@@ -72,9 +72,10 @@ func {{.FuncPrefix}}{{.OptionName}}{{.TypeParamsDecl}}({{.ParamVar}} ...string) 
 
 // Generate renders the option function for field.
 func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.OptField, values plugin.Pipeline) (plugin.GeneratedCode, error) {
-	ctx.AddImport("net")
+	netPackage := ctx.AddStdlibImport("net", "net")
 
 	appendMode := plugin.IsTruthyMetadata(field.Metadata, "append")
+	ctx.InputIsNewCollection = true
 
 	errExpr := ""
 
@@ -85,17 +86,18 @@ func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.Op
 		}
 	}
 
-	if ctx.OptionReturnsError && (errExpr == "" || strings.HasPrefix(errExpr, "fmt.")) {
-		ctx.AddImport("fmt")
+	if ctx.OptionReturnsError && strings.HasPrefix(errExpr, "fmt.") {
+		_ = ctx.AddStdlibImport("fmt", "fmt")
 	}
 
 	data := struct {
 		fieldtmpl.Data
-		Append   bool
-		ErrExpr  string
-		ParamVar string
-		RangeVar string
-		IPVar    string
+		Append     bool
+		ErrExpr    string
+		ParamVar   string
+		RangeVar   string
+		IPVar      string
+		NetPackage string
 	}{
 		Data:   fieldtmpl.NewData(ctx, field, values, "netIPs"),
 		Append: appendMode,
@@ -108,8 +110,13 @@ func (p *NetIPParsePlugin) Generate(ctx plugin.GenerationContext, field model.Op
 	data.IPVar = fieldtmpl.UniqueParameterName("ip", used)
 
 	if errExpr == "" {
-		errExpr = `fmt.Errorf("invalid IP %q", ` + data.RangeVar + ")"
+		if ctx.OptionReturnsError {
+			fmtPackage := ctx.AddStdlibImport("fmt", "fmt")
+			errExpr = fmtPackage + `.Errorf("invalid IP %q", ` + data.RangeVar + ")"
+		}
 	}
+
+	data.NetPackage = netPackage
 
 	data.ErrExpr = errExpr
 	if appendMode {

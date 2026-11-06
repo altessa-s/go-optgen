@@ -148,6 +148,15 @@ func TestOneOfCheck(t *testing.T) {
 	require.ErrorIs(t, (&check.OneOfCheck{}).Validate(field, "[]"), plugin.ErrInvalidCheckValue)
 }
 
+func TestOneOfRejectsDuplicateConstantValues(t *testing.T) {
+	t.Parallel()
+
+	checker := &check.OneOfCheck{}
+	require.ErrorIs(t, checker.Validate(model.OptField{Type: "string"}, `["open", "open"]`), plugin.ErrInvalidCheckValue)
+	require.ErrorIs(t, checker.Validate(model.OptField{Type: "Mode", TypeResolved: true, IsComparable: true,
+		CheckValueIdentity: map[string]string{"Open": `String:"open"`, "AliasOpen": `String:"open"`}}, `[Open, AliasOpen]`), plugin.ErrInvalidCheckValue)
+}
+
 func TestOneOfCheckAcceptsNumericLiteralsAndUnresolvedNamedStrings(t *testing.T) {
 	t.Parallel()
 

@@ -76,7 +76,8 @@ Pipeline execution is separate from registration: construct it with `plugin.NewP
 | `Descriptor`       | Read-only snapshot of a registered plugin returned by `Registry.Descriptors`             |
 | `ValueKind`        | Field value classification used by checks (`ValueKindOf`)                                |
 | `Meta`             | Plugin metadata: name, kind, priority, and applicable types                              |
-| `GenerationContext`| Per-field context passed to plugins with struct info, imports, and helpers                |
+| `GenerationContext`| Per-field context with struct info, import collection, and generated standard-library aliases |
+| `BodyIdentifiers` / `UniqueIdentifier` | Shared identifier collection and collision-safe local naming for generated bodies |
 | `GeneratedCode`    | Output of `FieldPlugin.Generate`: code, type definitions, and helper functions           |
 | `Phase` | Modifier execution phase: guard, transform, post-process, check, or clone |
 | `ModifierResult` | Output of `ModifierPlugin.Generate`: code lines, output variable, and termination flag |

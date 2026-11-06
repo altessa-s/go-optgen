@@ -4,6 +4,8 @@
 
 package plugin
 
+import "strings"
+
 // BuildEarlyReturn generates an if-block that returns early from the option function
 // when condition is true. If ctx.OptionReturnsError is set the block returns nil
 // (no error); otherwise it uses a bare return. The returned slice contains the opening
@@ -28,17 +30,20 @@ func BuildNilEarlyReturn(ctx GenerationContext, valueVar string) []string {
 // including an interface that wraps a nil pointer, map, slice, channel or
 // function. It imports reflect and compiles for any type.
 func BuildNilCheck(ctx GenerationContext, valueVar string, body ...string) []string {
-	ctx.AddImport("reflect")
+	reflectPackage := ctx.AddStdlibImport("reflect", "reflect")
 
 	lines := make([]string, 0, 2*len(body)+6)
 
-	lines = append(lines, "switch rv := reflect.ValueOf("+valueVar+"); rv.Kind() {", "case reflect.Invalid:")
+	lines = append(lines, "switch rv := "+reflectPackage+".ValueOf("+valueVar+"); rv.Kind() {", "case "+reflectPackage+".Invalid:")
 	for _, line := range body {
 		lines = append(lines, "  "+line)
 	}
 
 	lines = append(lines,
-		"case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:",
+		"case "+strings.Join([]string{
+			reflectPackage + ".Chan", reflectPackage + ".Func", reflectPackage + ".Interface", reflectPackage + ".Map",
+			reflectPackage + ".Pointer", reflectPackage + ".Slice", reflectPackage + ".UnsafePointer",
+		}, ", ")+":",
 		"  if rv.IsNil() {",
 	)
 	for _, line := range body {

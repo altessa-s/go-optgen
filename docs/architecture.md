@@ -86,8 +86,8 @@ docs, and the generator validates them against the final function name using the
 doc that starts with the full generated function name and uses it as the complete doc; multi-option fields discard a doc that starts with any generated
 function name so it cannot leak to sibling options. All field plugins share this behavior through their common templates.
 
-The source adapter resolves the types and constant status of check expressions and stores only assignability results on each `OptField`. Check plugins
-use those results during semantic preparation to reject bounds and case values that would fail in generated code.
+The source adapter resolves the types, representability, and constant identities of check expressions. `OptField` carries these facts so check
+plugins can reject invalid bounds, incompatible case values, and duplicate `oneof` cases before rendering.
 
 Collection setters bypass value modifiers for map keys and values. `clone=eager` snapshots slice or map input before the option closure is created through
 the enabled clone modifier's pipeline result, while `clone` copies during closure application. Disabled clone plugins emit neither snapshots nor imports.

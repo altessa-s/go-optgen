@@ -40,6 +40,9 @@ constants. `min` accepts numeric fields and `time.Duration`; a field with `optch
 `optgen:"enables=flagField"` sets a bool field after the option assignment. `optgen:"resets=a|b"` resets listed fields after assignment. Guards that
 return early skip these updates.
 
+Collection tags `optval:"clone"`, `optgen:"set"`, and `optgen:"put"` require slice and map types written directly on the field (`[]T` or `map[K]V`).
+Named slice and map types are not supported by these tags.
+
 ## Documentation
 
 Generated options use a field's complete godoc when it starts with the final generated function name and a space. For example, `WithTimeout controls...`

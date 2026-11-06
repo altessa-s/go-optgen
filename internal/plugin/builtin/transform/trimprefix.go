@@ -34,9 +34,9 @@ func (t *TrimPrefixTransformPlugin) Apply(ctx plugin.GenerationContext, field mo
 		return expr, false
 	}
 
-	ctx.AddImport("strings")
+	pkg := ctx.AddStdlibImport("strings", "strings")
 
-	return "strings.TrimPrefix(" + expr + ", " + quote(prefix) + ")", true
+	return pkg + ".TrimPrefix(" + expr + ", " + quote(prefix) + ")", true
 }
 
 // quote returns a Go string literal.

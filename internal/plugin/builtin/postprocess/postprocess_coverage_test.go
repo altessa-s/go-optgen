@@ -67,8 +67,8 @@ func TestDedupModifier(t *testing.T) {
 	require.Empty(t, ctx.GetAdditionalImports(), "deduplication needs no imports")
 
 	res = m.Generate(newCtx(false), model.OptField{ElemType: "string"}, "deduped")
-	require.Equal(t, "deduped2 := make([]string, 0, len(deduped))", res.Code[0])
-	require.Equal(t, "deduped2", res.OutputVar, "the output name avoids the input's")
+	require.Equal(t, "dedupedArg := make([]string, 0, len(deduped))", res.Code[0])
+	require.Equal(t, "dedupedArg", res.OutputVar, "the output name avoids the input's")
 }
 
 func TestNonEmptyModifier(t *testing.T) {
@@ -212,4 +212,31 @@ func imports(ctx plugin.GenerationContext) []string {
 	}
 
 	return paths
+}
+
+func TestCloneModifierChoosesFreeStdlibAlias(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.Imports = map[string]model.ImportInfo{"slices": {Path: "example.com/collections", Alias: "slices"}}
+	field := model.OptField{Type: "[]slices.Value", IsSlice: true, ElemType: "slices.Value"}
+	result := (&postprocess.CloneModifier{}).Generate(ctx, field, "v")
+	require.Equal(t, []string{"cloned := slices2.Clone(v)"}, result.Code)
+	require.Equal(t, []model.GeneratedImport{{Path: "slices", Alias: "slices2"}}, ctx.GetAdditionalImports())
+}
+
+func TestCollectionModifiersAvoidIdentifiersUsedByChecksAndResetTypes(t *testing.T) {
+	t.Parallel()
+
+	ctx := newCtx(false)
+	ctx.StructFields = []model.StructField{{Name: "backup", Type: "deduped"}}
+	field := model.OptField{FieldName: "items", Type: "[]int", ElemType: "int", IsSlice: true,
+		Checks: map[string]string{"minlen": "cloned+seen+item"}, Metadata: map[string]string{"resets": "backup"}}
+	clone := (&postprocess.CloneModifier{}).Generate(ctx, field, "v")
+	require.Equal(t, "clonedArg", clone.OutputVar)
+
+	dedup := (&postprocess.DedupModifier{}).Generate(ctx, field, "v")
+	require.Equal(t, "dedupedArg", dedup.OutputVar)
+	require.Contains(t, dedup.Code[2], "seenArg := make(map[int]")
+	require.Contains(t, dedup.Code[3], "itemArg := range v")
 }

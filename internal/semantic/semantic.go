@@ -71,7 +71,7 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 		f.Mandatory = f.Mandatory || f.Metadata["mandatory"] == "true"
 
 		f.OptionName = p.options.prefix + optionName
-		prefixOptionDocumentation(f, optionName, f.OptionName, p.options.prefix)
+		prefixOptionDocumentation(f, optionName, f.OptionName, p.options.prefix, p.options.funcPrefix, p.options.invertFuncPrefix)
 
 		if f.Metadata["manual"] != metadataTrue && !f.Mandatory && !f.DefaultOnly && f.OptionName != "" {
 			if previous, exists := optionNames[f.OptionName]; exists {
@@ -115,38 +115,42 @@ func (p *Preparer) Prepare(fields []model.OptField) ([]model.OptField, error) {
 	return out, nil
 }
 
-func prefixOptionDocumentation(field *model.OptField, oldName, newName, prefix string) {
+func prefixOptionDocumentation(field *model.OptField, oldName, newName, prefix string, functionPrefixes ...string) {
 	if prefix == "" {
 		return
 	}
 
 	if field.HasOptionDoc {
-		field.OptionDoc = prefixOptionDoc(field.OptionDoc, oldName, newName)
+		field.OptionDoc = prefixOptionDoc(field.OptionDoc, oldName, newName, functionPrefixes...)
 		return
 	}
 
 	if field.Metadata["multiopt"] != metadataTrue {
-		field.Doc = prefixOptionDoc(field.Doc, oldName, newName)
+		field.Doc = prefixOptionDoc(field.Doc, oldName, newName, functionPrefixes...)
 	}
 }
 
-func prefixOptionDoc(doc, oldName, newName string) string {
+func prefixOptionDoc(doc, oldName, newName string, functionPrefixes ...string) string {
 	boundary := strings.IndexFunc(doc, unicode.IsSpace)
 	if boundary <= 0 {
 		return doc
 	}
 
 	functionName := doc[:boundary]
-	if !strings.HasPrefix(functionName, "With") && !strings.HasPrefix(functionName, "Set") {
-		return doc
-	}
-
 	if strings.HasSuffix(functionName, newName) || !strings.HasSuffix(functionName, oldName) {
 		return doc
 	}
 
 	funcPrefix := strings.TrimSuffix(functionName, oldName)
-	if funcPrefix == "" {
+	knownPrefixes := []string{"With", "Without", "Set"}
+
+	for _, prefix := range functionPrefixes {
+		if prefix != "" {
+			knownPrefixes = append(knownPrefixes, prefix)
+		}
+	}
+
+	if !slices.Contains(knownPrefixes, funcPrefix) {
 		return doc
 	}
 

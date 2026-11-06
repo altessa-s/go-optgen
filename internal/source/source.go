@@ -5,17 +5,21 @@
 package source
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"maps"
+	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -211,13 +215,87 @@ func (r typeFacts) CheckValueValid(field ast.Expr, pos token.Pos, expression str
 
 	if value.Value != nil {
 		if target, ok := types.Unalias(fieldType).Underlying().(*types.Basic); ok && target.Info()&types.IsInteger != 0 {
-			if constant.ToInt(value.Value).Kind() == constant.Unknown {
+			if !integerConstantRepresentable(value.Value, target.Kind()) {
 				return false
 			}
 		}
 	}
 
 	return types.AssignableTo(value.Type, fieldType)
+}
+
+func (r typeFacts) CheckValueIdentity(field ast.Expr, pos token.Pos, expression string) string {
+	if r.info.TypeOf(field) == nil {
+		return ""
+	}
+
+	value, err := types.Eval(r.fset, r.types, pos, expression)
+	if err != nil || value.Value == nil {
+		return ""
+	}
+
+	return value.Value.Kind().String() + ":" + value.Value.String()
+}
+
+func integerConstantRepresentable(value constant.Value, kind types.BasicKind) bool {
+	integer := constant.ToInt(value)
+	if integer.Kind() == constant.Unknown {
+		return false
+	}
+
+	var constantInteger *big.Int
+
+	switch value := constant.Val(integer).(type) {
+	case int64:
+		constantInteger = big.NewInt(value)
+	case *big.Int:
+		constantInteger = value
+	default:
+		return false
+	}
+
+	var bits int
+
+	signed := true
+
+	switch kind {
+	case types.Int8:
+		bits = 8
+	case types.Int16:
+		bits = 16
+	case types.Int32:
+		bits = 32
+	case types.Int64:
+		bits = 64
+	case types.Uint, types.Uintptr:
+		signed = false
+		bits = int(types.SizesFor("gc", runtime.GOARCH).Sizeof(types.Typ[kind]) * bitsPerByte)
+	case types.Uint8:
+		signed = false
+		bits = 8
+	case types.Uint16:
+		signed = false
+		bits = 16
+	case types.Uint32:
+		signed = false
+		bits = 32
+	case types.Uint64:
+		signed = false
+		bits = 64
+	case types.Int:
+		bits = int(types.SizesFor("gc", runtime.GOARCH).Sizeof(types.Typ[kind]) * bitsPerByte)
+	default:
+		return true
+	}
+
+	if !signed {
+		return constantInteger.Sign() >= 0 && constantInteger.BitLen() <= bits
+	}
+
+	lowerBound := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), uint(bits-1)))
+	upperBound := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), uint(bits-1)), big.NewInt(1))
+
+	return constantInteger.Cmp(lowerBound) >= 0 && constantInteger.Cmp(upperBound) <= 0
 }
 
 func typeNilable(t types.Type) bool {
@@ -233,7 +311,10 @@ func typeNilable(t types.Type) bool {
 	}
 }
 
-const maxSetterResults = 2
+const (
+	maxSetterResults = 2
+	bitsPerByte      = 8
+)
 
 // ResolveSetterTarget resolves an optfn function or method and renders its parameter signature.
 func (r typeFacts) ResolveSetterTarget(
@@ -247,7 +328,7 @@ func (r typeFacts) ResolveSetterTarget(
 		return model.SetterTarget{}, fmt.Errorf("type information is unavailable")
 	}
 
-	signature, targetPackage, err := r.setterSignature(field, pos, expression, method)
+	signature, targetPackage, err := r.setterSignature(field, pos, expression, method, imports)
 	if err != nil {
 		return model.SetterTarget{}, err
 	}
@@ -278,12 +359,16 @@ func (r typeFacts) ResolveSetterTarget(
 	target := model.SetterTarget{Expression: expression, Method: method, ReturnsError: returnsError}
 
 	importsForTarget := newTargetImports(r.types, imports, expression, method, targetPackage)
+	if !method {
+		target.Expression = qualifyDotImportedTypeArguments(expression, imports, r.types, &importsForTarget)
+	}
+
 	if !method && targetPackage != nil && targetPackage.Path() != r.types.Path() {
 		if root := expressionRootIdentifier(expression); root != "" {
 			if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok && fn.Pkg().Path() == r.types.Path() {
 				// Keep functions declared in the current package unqualified.
 			} else {
-				target.Expression = importsForTarget.qualifier(targetPackage) + "." + expression
+				target.Expression = importsForTarget.qualifier(targetPackage) + "." + target.Expression
 			}
 		}
 	}
@@ -294,7 +379,83 @@ func (r typeFacts) ResolveSetterTarget(
 	return target, nil
 }
 
-func (r typeFacts) setterSignature(field ast.Expr, pos token.Pos, expression string, method bool) (*types.Signature, *types.Package, error) {
+func qualifyDotImportedTypeArguments(
+	expression string,
+	imports map[string]model.ImportInfo,
+	current *types.Package,
+	resolver *targetImportResolver,
+) string {
+	dotPackages := make([]*types.Package, 0)
+
+	for _, imp := range imports {
+		if imp.Alias != "." {
+			continue
+		}
+
+		for _, imported := range current.Imports() {
+			if imported.Path() == imp.Path {
+				dotPackages = append(dotPackages, imported)
+			}
+		}
+	}
+
+	if len(dotPackages) == 0 {
+		return expression
+	}
+
+	expr, err := parser.ParseExpr(expression)
+	if err != nil {
+		return expression
+	}
+
+	qualify := func(expr ast.Expr) ast.Expr {
+		ident, ok := expr.(*ast.Ident)
+		if !ok {
+			return expr
+		}
+
+		for _, imported := range dotPackages {
+			if !ast.IsExported(ident.Name) {
+				continue
+			}
+
+			if imported.Scope().Lookup(ident.Name) == nil {
+				continue
+			}
+
+			return &ast.SelectorExpr{X: ast.NewIdent(resolver.qualifier(imported)), Sel: ident}
+		}
+
+		return expr
+	}
+	ast.Inspect(expr, func(node ast.Node) bool {
+		switch index := node.(type) {
+		case *ast.IndexExpr:
+			index.Index = qualify(index.Index)
+		case *ast.IndexListExpr:
+			for i := range index.Indices {
+				index.Indices[i] = qualify(index.Indices[i])
+			}
+		}
+
+		return true
+	})
+
+	var rendered bytes.Buffer
+	if err := format.Node(&rendered, token.NewFileSet(), expr); err != nil {
+		return expression
+	}
+
+	return rendered.String()
+}
+
+func (r typeFacts) setterSignature(
+	field ast.Expr,
+	pos token.Pos,
+	expression string,
+	method bool,
+	imports map[string]model.ImportInfo,
+) (*types.Signature, *types.Package, error) {
 	if method {
 		fieldType := r.info.TypeOf(field)
 		if fieldType == nil {
@@ -325,18 +486,40 @@ func (r typeFacts) setterSignature(field ast.Expr, pos token.Pos, expression str
 	}
 
 	if root := expressionRootIdentifier(expression); root != "" {
-		if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok {
-			return sig, fn.Pkg(), nil
-		}
-
-		for _, imported := range r.types.Imports() {
-			if fn, ok := imported.Scope().Lookup(root).(*types.Func); ok {
-				return sig, fn.Pkg(), nil
-			}
+		if targetPackage := r.setterTargetPackage(root, imports); targetPackage != nil {
+			return sig, targetPackage, nil
 		}
 	}
 
 	return sig, r.types, nil
+}
+
+func (r typeFacts) setterTargetPackage(root string, imports map[string]model.ImportInfo) *types.Package {
+	if fn, ok := r.types.Scope().Lookup(root).(*types.Func); ok {
+		return fn.Pkg()
+	}
+
+	for _, imp := range imports {
+		if imp.Alias != "." {
+			continue
+		}
+
+		for _, imported := range r.types.Imports() {
+			if imported.Path() == imp.Path {
+				if _, ok := imported.Scope().Lookup(root).(*types.Func); ok {
+					return imported
+				}
+			}
+		}
+	}
+
+	for _, imported := range r.types.Imports() {
+		if _, ok := imported.Scope().Lookup(root).(*types.Func); ok {
+			return imported
+		}
+	}
+
+	return nil
 }
 
 func expressionRootIdentifier(expression string) string {
@@ -408,7 +591,9 @@ func addSelectorImports(resolver *targetImportResolver, current *types.Package, 
 		}
 
 		resolver.aliases[imp.Path] = alias
-		resolver.imports = append(resolver.imports, model.GeneratedImport{Path: imp.Path, Alias: alias})
+		if !slices.ContainsFunc(resolver.imports, func(existing model.GeneratedImport) bool { return existing.Path == imp.Path }) {
+			resolver.imports = append(resolver.imports, model.GeneratedImport{Path: imp.Path, Alias: alias})
+		}
 	}
 }
 

@@ -34,9 +34,9 @@ func buildFail(ctx plugin.GenerationContext, msg string) string {
 		return "return"
 	}
 
-	ctx.AddImport("fmt")
+	fmtPackage := ctx.AddStdlibImport("fmt", "fmt")
 
-	errExpr := fmt.Sprintf(`fmt.Errorf(%q)`, msg)
+	errExpr := fmt.Sprintf(`%s.Errorf(%q)`, fmtPackage, msg)
 	if ctx.OptionReturnsError {
 		return "return " + errExpr
 	}

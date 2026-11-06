@@ -35,4 +35,5 @@ type TypeResolver interface {
 // CheckValueResolver reports whether a check expression is type-compatible with its field.
 type CheckValueResolver interface {
 	CheckValueValid(field ast.Expr, pos token.Pos, expression string, constant bool) bool
+	CheckValueIdentity(field ast.Expr, pos token.Pos, expression string) string
 }

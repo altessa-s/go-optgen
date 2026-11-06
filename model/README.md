@@ -41,6 +41,7 @@ package rather than any internal package to access the types they receive and pr
 | `Metadata`     | Flags and `key=value` pairs from the `optgen` tag (e.g. `append`, `notnil`)                   |
 | `Checks`       | Validation rules from the `optcheck` tag (e.g. `{"required":"", "minlen":"3"}`)               |
 | `CheckValueValid` | Type-check result for oneof constants and min bounds when source type information is available |
+| `CheckValueIdentity` | Canonical identity of resolved constant values, used to reject duplicate `oneof` cases |
 | `IsSlice`      | Whether the field is a slice type                                                             |
 | `IsMap`        | Whether the field is a map type; `MapKeyType`, `MapKeyString`, `MapValueType`, and `MapValueNilable` describe its entries |
 | `IsInterface`  | Whether the field is an interface type                                                        |

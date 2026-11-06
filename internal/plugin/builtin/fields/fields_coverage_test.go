@@ -277,6 +277,23 @@ func TestNetIPParsePlugin(t *testing.T) {
 			require.NotEqual(t, "fmt", imp.Path)
 		}
 	})
+
+	t.Run("clone skips the already allocated parse result", func(t *testing.T) {
+		t.Parallel()
+
+		f := base
+		f.Metadata = map[string]string{"parseip": "true"}
+		f.Modifiers = []string{"clone"}
+		f.HasModifiers = true
+		ctx := newCtx(false)
+		code, err := p.Generate(ctx, f, plugin.NewPipeline(testRegistry()))
+		require.NoError(t, err)
+		require.NotContains(t, code.Code, "slices.Clone")
+
+		for _, imp := range ctx.GetAdditionalImports() {
+			require.NotEqual(t, "slices", imp.Path)
+		}
+	})
 }
 
 func TestDefaultSetterPlugin(t *testing.T) {

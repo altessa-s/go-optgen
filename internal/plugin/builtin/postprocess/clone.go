@@ -38,28 +38,35 @@ func (m *CloneModifier) Generate(ctx plugin.GenerationContext, field model.OptFi
 		}
 
 		if field.IsSlice {
-			ctx.AddImport("slices")
-			return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = slices.Clone(" + snapshotVar + ")\n"}
+			pkg := ctx.AddStdlibImport("slices", "slices")
+			return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = " + pkg + ".Clone(" + snapshotVar + ")\n"}
 		}
 
-		ctx.AddImport("maps")
+		pkg := ctx.AddStdlibImport("maps", "maps")
 
-		return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = maps.Clone(" + snapshotVar + ")\n"}
+		return plugin.ModifierResult{OutputVar: inputVar, PreClosureCode: "\t" + snapshotVar + " = " + pkg + ".Clone(" + snapshotVar + ")\n"}
+	}
+
+	if ctx.InputIsNewCollection {
+		return plugin.ModifierResult{OutputVar: inputVar}
 	}
 
 	if inputVar != cmp.Or(ctx.InputVar, "v") {
 		return plugin.ModifierResult{OutputVar: inputVar}
 	}
 
-	if field.IsSlice {
-		ctx.AddImport("slices")
+	used := plugin.BodyIdentifiers(ctx, field, field.Type, field.ElemType, field.MapKeyType, field.MapValueType, inputVar)
+	cloneVar := plugin.UniqueIdentifier("cloned", used)
 
-		return plugin.ModifierResult{Code: []string{"cloned := slices.Clone(" + inputVar + ")"}, OutputVar: "cloned"}
+	if field.IsSlice {
+		pkg := ctx.AddStdlibImport("slices", "slices")
+
+		return plugin.ModifierResult{Code: []string{cloneVar + " := " + pkg + ".Clone(" + inputVar + ")"}, OutputVar: cloneVar}
 	}
 
-	ctx.AddImport("maps")
+	pkg := ctx.AddStdlibImport("maps", "maps")
 
-	return plugin.ModifierResult{Code: []string{"cloned := maps.Clone(" + inputVar + ")"}, OutputVar: "cloned"}
+	return plugin.ModifierResult{Code: []string{cloneVar + " := " + pkg + ".Clone(" + inputVar + ")"}, OutputVar: cloneVar}
 }
 
 func hasModifier(field model.OptField, want string) bool {

@@ -14,6 +14,8 @@ import (
 	"github.com/altessa-s/go-optgen/plugin"
 )
 
+const metadataTrue = "true"
+
 // Common defines the shared "optionReturn" template that renders the
 // trailing return of an option function.
 const Common = `
@@ -44,13 +46,13 @@ func Execute(tmpl *template.Template, data any) (plugin.GeneratedCode, error) {
 		functionName := base.FuncPrefix + base.OptionName
 
 		if base.HasOptionDoc {
-			if !strings.HasPrefix(base.OptionDoc, functionName+" ") {
+			if !startsWithOptionFunction(base.OptionDoc, functionName) {
 				return plugin.GeneratedCode{}, fmt.Errorf("field %s option %s: optgen:doc must start with %s ",
 					base.FieldName, base.OptionName, functionName)
 			}
 
 			base.FullDocComment = fullDocComment(base.OptionDoc)
-		} else if base.Metadata["multiopt"] != "true" && strings.HasPrefix(base.Doc, functionName+" ") {
+		} else if base.Metadata["multiopt"] != metadataTrue && startsWithOptionFunction(base.Doc, functionName) {
 			base.FullDocComment = fullDocComment(base.Doc)
 		}
 	}
@@ -61,6 +63,10 @@ func Execute(tmpl *template.Template, data any) (plugin.GeneratedCode, error) {
 	}
 
 	return plugin.GeneratedCode{Code: buf.String()}, nil
+}
+
+func startsWithOptionFunction(doc, functionName string) bool {
+	return strings.HasPrefix(doc, functionName+" ") || strings.HasPrefix(doc, functionName+"\n")
 }
 
 type optionDocData interface {
@@ -117,7 +123,7 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 
 	doc := field.Doc
 
-	if field.Metadata["multiopt"] == "true" && startsWithGeneratedOptionFunction(doc, ctx, field) {
+	if field.Metadata["multiopt"] == metadataTrue && startsWithGeneratedOptionFunction(doc, ctx, field) {
 		doc = ""
 	}
 
@@ -141,69 +147,20 @@ func NewBaseData(ctx plugin.GenerationContext, field model.OptField) BaseData {
 // ParameterIdentifiers returns identifiers that an option parameter must not
 // shadow in the generated function body.
 func ParameterIdentifiers(ctx plugin.GenerationContext, field model.OptField, sources ...string) map[string]bool {
-	used := make(map[string]bool)
-	used[ctx.TypeName] = true
-	used["o"] = true
-	used["error"] = true
-	used["false"] = true
-	used["append"] = true
-	used["any"] = true
-	used["len"] = true
-	used["make"] = true
-	used["nil"] = true
-	used["new"] = true
-	used["true"] = true
-
-	for _, param := range ctx.GenericInfo.TypeParams {
-		used[param.Name] = true
+	used := plugin.BodyIdentifiers(ctx, field, sources...)
+	for _, name := range reservedBodyIdentifiers {
+		used[name] = true
 	}
-
-	if ctx.WithIsSet {
-		used[ctx.IsSetConst(field)] = true
-	}
-
-	for target := range strings.SplitSeq(field.Metadata["resets"], "|") {
-		target = strings.TrimSpace(target)
-
-		for _, sourceField := range ctx.StructFields {
-			if sourceField.Name != target {
-				continue
-			}
-
-			addIdentifiers(used, sourceField.Type)
-
-			for _, imp := range sourceField.TypeImports {
-				addIdentifiers(used, imp.Alias)
-			}
-
-			break
-		}
-	}
-
-	for _, source := range sources {
-		addIdentifiers(used, source)
-	}
-
-	addIdentifiers(used, field.Metadata["err"])
 
 	return used
 }
 
-func addIdentifiers(used map[string]bool, source string) {
-	for i := 0; i < len(source); {
-		if !isIdentifierStart(source[i]) {
-			i++
-			continue
-		}
-
-		start := i
-
-		for i < len(source) && isIdentifierContinue(source[i]) {
-			i++
-		}
-
-		used[source[start:i]] = true
-	}
+var reservedBodyIdentifiers = []string{
+	"append", "any", "bool", "byte", "cap", "clear", "close", "complex", "comparable", "copy", "delete", "error", "false",
+	"float32", "float64", "int", "int16", "int32", "int64", "int8", "len", "make", "max", "min", "new", "nil", "panic",
+	"print", "println", "real", "recover", "rune", "string", "true", "uint", "uint16", "uint32", "uint64", "uint8", "uintptr",
+	"fmt", "maps", "net", "reflect", "slices", "strings", "time", "cloned", "deduped", "deduped2", "nonEmpty",
+	"transformed", "transformedValue", "seen", "item", "element", "rv",
 }
 
 // UniqueParameterName returns preferred with Arg suffixes until it avoids every
@@ -214,14 +171,6 @@ func UniqueParameterName(preferred string, used map[string]bool) string {
 	}
 
 	return preferred
-}
-
-func isIdentifierStart(c byte) bool {
-	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
-}
-
-func isIdentifierContinue(c byte) bool {
-	return isIdentifierStart(c) || c >= '0' && c <= '9'
 }
 
 func startsWithGeneratedOptionFunction(doc string, ctx plugin.GenerationContext, field model.OptField) bool {

@@ -259,6 +259,30 @@ func TestReaderResolvesCheckConstantsFromGeneratedFiles(t *testing.T) {
 	require.Equal(t, map[string]bool{"ModeA": true, "ModeB": true}, packages[0].Fields[0].CheckValueValid)
 }
 
+func TestReaderResolvesOptfnFromDotImport(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":           "module sample\n\ngo 1.26\n",
+		"options.go":       "package sample\nimport . \"sample/custom\"\ntype options struct { policy Policy `optfn:\"Policy=New[Item]\"` }\n",
+		"other.go":         "package sample\nimport \"errors\"\nvar _ = errors.New(\"x\")\n",
+		"custom/custom.go": "package custom\ntype Policy int\ntype Item string\nfunc New[T any](T) Policy { return 0 }\n",
+	} {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+	require.Len(t, packages[0].Fields, 1)
+	target := packages[0].Fields[0].SetterTarget
+	require.NotNil(t, target)
+	require.Equal(t, "custom.New[custom.Item]", target.Expression)
+	require.Equal(t, []model.GeneratedImport{{Path: "sample/custom"}}, target.Imports)
+}
+
 func TestReaderResolvesDottedImportPackageName(t *testing.T) {
 	t.Parallel()
 
@@ -300,6 +324,38 @@ func TestReaderResolvesCheckConstantsAndCompatibility(t *testing.T) {
 	require.False(t, byField["count"].CheckValueValid["1.5"])
 	require.True(t, byField["mode"].CheckValueValid["FailOpen"])
 	require.False(t, byField["mode"].CheckValueValid["FailClosed"])
+}
+
+func TestReaderRejectsIntegerCheckConstantsOutsideFieldRange(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\ntype options struct { retries uint8 `optcheck:\"min=-1\"`; port uint16 `optcheck:\"oneof=[80, 70000]\"` }\n"), 0o600))
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	byName := make(map[string]model.OptField)
+	for _, field := range packages[0].Fields {
+		byName[field.FieldName] = field
+	}
+
+	require.False(t, byName["retries"].CheckValueValid["-1"])
+	require.True(t, byName["port"].CheckValueValid["80"])
+	require.False(t, byName["port"].CheckValueValid["70000"])
+}
+
+func TestReaderRejectsOneOfConstantsWithDuplicateValues(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module sample\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "options.go"), []byte("package sample\ntype Mode string\nconst (Open Mode = \"open\"; AliasOpen Mode = Open)\ntype options struct { mode Mode `optcheck:\"oneof=[Open, AliasOpen]\"` }\n"), 0o600))
+	packages, err := (source.Reader{}).Parse(t.Context(), dir, "options", false)
+	require.NoError(t, err)
+
+	registry := plugin.NewRegistry()
+	require.NoError(t, builtin.Register(registry))
+	_, err = semantic.New(registry).Prepare(packages[0].Fields)
+	require.ErrorIs(t, err, plugin.ErrInvalidCheckValue)
 }
 
 func TestReaderResolvesCheckFactsForCaseInsensitiveKeys(t *testing.T) {

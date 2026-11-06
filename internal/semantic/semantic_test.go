@@ -376,6 +376,31 @@ func TestPrepareAllowsDuplicateOptionNameWhenOneFieldIsMandatory(t *testing.T) {
 	require.True(t, prepared[0].Mandatory)
 }
 
+func TestPreparePrefixesDocsWithConfiguredFunctionPrefixes(t *testing.T) {
+	t.Parallel()
+
+	r := builtinRegistry(t)
+	for _, tc := range []struct{ name, prefix, doc, want string }{
+		{"custom", "Configure", "ConfigureName sets the name.", "ConfigureClientName sets the name."},
+		{"inverted", "Disable", "DisableName disables the name.", "DisableClientName disables the name."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			options := []semantic.Option{semantic.WithPrefix("Client")}
+			if tc.name == "custom" {
+				options = append(options, semantic.WithFuncPrefix(tc.prefix))
+			} else {
+				options = append(options, semantic.WithInvertFuncPrefix(tc.prefix))
+			}
+
+			prepared, err := semantic.New(r, options...).Prepare([]model.OptField{{FieldName: "name", OptionName: "Name", Type: "string", Doc: tc.doc}})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, prepared[0].Doc)
+		})
+	}
+}
+
 func TestPrepareDoesNotPrefixOrdinaryFieldDocumentation(t *testing.T) {
 	t.Parallel()
 	prepared, err := semantic.New(builtinRegistry(t), semantic.WithPrefix("Server")).Prepare([]model.OptField{{

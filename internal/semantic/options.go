@@ -17,6 +17,10 @@ type options struct {
 	prefix string `optval:"notrim"`
 	// exclude drops fields whose name matches one of these path.Match patterns.
 	exclude []string `optval:"nodup"`
+	// funcPrefix identifies generated functions whose option names get prefixed.
+	funcPrefix string
+	// invertFuncPrefix identifies generated inverted options whose names get prefixed.
+	invertFuncPrefix string
 	// warningSink receives diagnostics, such as a check skipped because its
 	// plugin is disabled.
 	warningSink func(message string)

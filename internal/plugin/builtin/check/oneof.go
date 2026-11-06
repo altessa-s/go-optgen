@@ -18,7 +18,10 @@ import (
 	"github.com/altessa-s/go-optgen/plugin"
 )
 
-const oneofPriority = 40
+const (
+	oneofPriority = 40
+	stringType    = "string"
+)
 
 // OneOfCheck generates validation code ensuring a value is one of the allowed values.
 // Tag usage: optcheck:"oneof=[val1,val2,val3]".
@@ -33,7 +36,24 @@ func (c *OneOfCheck) Validate(field model.OptField, rawValue string) error {
 		return fmt.Errorf("%w: oneof requires at least one value", plugin.ErrInvalidCheckValue)
 	}
 
-	if field.Type == "string" {
+	seen := make(map[string]string, len(items))
+	for _, item := range items {
+		identity := field.CheckValueIdentity[item]
+		if identity == "" {
+			identity = strings.TrimSpace(item)
+			if field.Type == stringType {
+				identity = normalizeStringLiteral(item)
+			}
+		}
+
+		if previous, exists := seen[identity]; exists {
+			return fmt.Errorf("%w: duplicate oneof items %q and %q", plugin.ErrInvalidCheckValue, previous, item)
+		}
+
+		seen[identity] = item
+	}
+
+	if field.Type == stringType {
 		return nil
 	}
 
@@ -107,7 +127,7 @@ func (c *OneOfCheck) Generate(ctx plugin.GenerationContext, field model.OptField
 
 	vals := make([]string, 0, len(items))
 	for _, item := range items {
-		if field.Type == "string" {
+		if field.Type == stringType {
 			vals = append(vals, normalizeStringLiteral(item))
 		} else {
 			vals = append(vals, item)

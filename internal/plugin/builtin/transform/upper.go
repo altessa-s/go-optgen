@@ -17,6 +17,6 @@ type UpperTransformPlugin struct {
 
 // Apply wraps expr in the transformation.
 func (t *UpperTransformPlugin) Apply(ctx plugin.GenerationContext, _ model.OptField, _ string, expr string) (string, bool) {
-	ctx.AddImport("strings")
-	return "strings.ToUpper(" + expr + ")", true
+	pkg := ctx.AddStdlibImport("strings", "strings")
+	return pkg + ".ToUpper(" + expr + ")", true
 }

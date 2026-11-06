@@ -36,6 +36,54 @@ func WithExclude(v ...string) Option {
 	}
 }
 
+// WithFuncPrefix sets the funcPrefix option.
+//
+// funcPrefix identifies generated functions whose option names get prefixed.
+func WithFuncPrefix[T interface{ string | *string }](v T) Option {
+	return func(o *options) {
+		var value string
+		switch t := any(v).(type) {
+		case string:
+			value = t
+		case *string:
+			if t == nil {
+				return
+			}
+			value = *t
+		}
+		transformedValue := strings.TrimSpace(value)
+
+		if transformedValue == "" {
+			return
+		}
+		o.funcPrefix = transformedValue
+	}
+}
+
+// WithInvertFuncPrefix sets the invertFuncPrefix option.
+//
+// invertFuncPrefix identifies generated inverted options whose names get prefixed.
+func WithInvertFuncPrefix[T interface{ string | *string }](v T) Option {
+	return func(o *options) {
+		var value string
+		switch t := any(v).(type) {
+		case string:
+			value = t
+		case *string:
+			if t == nil {
+				return
+			}
+			value = *t
+		}
+		transformedValue := strings.TrimSpace(value)
+
+		if transformedValue == "" {
+			return
+		}
+		o.invertFuncPrefix = transformedValue
+	}
+}
+
 // WithPrefix sets the prefix option.
 //
 // prefix is prepended to every option name before validation.

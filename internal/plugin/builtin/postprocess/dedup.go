@@ -98,23 +98,25 @@ func isComparableType(typeStr string) bool {
 // option's captured variadic argument, and an Option value may be applied many
 // times, concurrently (reassigning it was a data race and made a second
 // application see the already deduplicated slice).
-func (m *DedupModifier) Generate(_ plugin.GenerationContext, field model.OptField, inputVar string) plugin.ModifierResult {
-	out := "deduped"
-	if inputVar == out {
-		out = "deduped2"
-	}
+func (m *DedupModifier) Generate(ctx plugin.GenerationContext, field model.OptField, inputVar string) plugin.ModifierResult {
+	used := plugin.BodyIdentifiers(ctx, field, field.Type, field.ElemType, inputVar)
+	out := plugin.UniqueIdentifier("deduped", used)
+	used[out] = true
+	seen := plugin.UniqueIdentifier("seen", used)
+	used[seen] = true
+	item := plugin.UniqueIdentifier("item", used)
 
 	return plugin.ModifierResult{
 		Code: []string{
 			out + " := make([]" + field.ElemType + ", 0, len(" + inputVar + "))",
 			"{",
-			"  seen := make(map[" + field.ElemType + "]struct{}, len(" + inputVar + "))",
-			"  for _, item := range " + inputVar + " {",
-			"    if _, ok := seen[item]; ok {",
+			"  " + seen + " := make(map[" + field.ElemType + "]struct{}, len(" + inputVar + "))",
+			"  for _, " + item + " := range " + inputVar + " {",
+			"    if _, ok := " + seen + "[" + item + "]; ok {",
 			"      continue",
 			"    }",
-			"    seen[item] = struct{}{}",
-			"    " + out + " = append(" + out + ", item)",
+			"    " + seen + "[" + item + "] = struct{}{}",
+			"    " + out + " = append(" + out + ", " + item + ")",
 			"  }",
 			"}",
 		},

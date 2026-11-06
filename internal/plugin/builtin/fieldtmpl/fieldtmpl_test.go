@@ -23,8 +23,8 @@ func TestParameterIdentifiersIncludesGeneratedBodyNames(t *testing.T) {
 	ctx.StructFields = []model.StructField{{Name: "other", Type: "pkg.Policy"}}
 	data := fieldtmpl.NewBaseData(ctx, model.OptField{OptionName: "Retry", Metadata: map[string]string{"enables": "active", "resets": "other"}})
 
-	used := fieldtmpl.ParameterIdentifiers(ctx, model.OptField{OptionName: "Retry"}, data.PostAssignment)
-	for _, name := range []string{"options", "T", "error", "len", "make", "nil", "new", "true", "optionsFieldRetry", "active", "pkg", "Policy"} {
+	used := fieldtmpl.ParameterIdentifiers(ctx, model.OptField{OptionName: "Retry", Checks: map[string]string{"min": "v", "oneof": "[v]"}}, data.PostAssignment)
+	for _, name := range []string{"options", "T", "error", "len", "make", "nil", "new", "true", "optionsFieldRetry", "active", "pkg", "Policy", "v", "cloned", "deduped"} {
 		require.True(t, used[name], "%s must be reserved", name)
 	}
 }
