@@ -2,7 +2,7 @@ module github.com/altessa-s/go-optgen
 
 go 1.27.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
